@@ -157,14 +157,17 @@ export function drawBoard(ctx, state) {
     factions,
   } = state;
 
-  const { originX, originY } = computeOrigin(ctx.canvas, cols, rows);
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  const canvas = ctx.canvas;
+  const { originX, originY } = computeOrigin(canvas, cols, rows);
+  const lw = canvas._logicW || canvas.width;
+  const lh = canvas._logicH || canvas.height;
+  ctx.clearRect(0, 0, lw, lh);
 
   // Stars
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   for (let i = 0; i < 60; i++) {
-    const sx = (i * 97) % ctx.canvas.width;
-    const sy = (i * 53) % ctx.canvas.height;
+    const sx = (i * 97) % lw;
+    const sy = (i * 53) % lh;
     ctx.fillRect(sx, sy, 1, 1);
   }
 

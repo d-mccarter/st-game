@@ -291,6 +291,7 @@ export function fireAt(game, targetShipId, weaponId) {
   const targets = fireTargetsFor(game, ship, weapon);
   if (!targets.some((t) => t.shipId === target.id)) return false;
 
+  if (game.settings.ruleOverload) ship.overload = true;
   let dmg = weapon.damage + (ship.overload ? 1 : 0);
   let absorbed = Math.min(target.shields, dmg);
   target.shields -= absorbed;
