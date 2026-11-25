@@ -93,7 +93,6 @@ function renderShipCard(ship) {
       <div class="stat">
         <span>Facing</span>
         <strong>${['E', 'NE', 'NW', 'W', 'SW', 'SE'][ship.facing] || ship.facing}</strong>
-        <span style="font-size:0.8rem;color:var(--muted)">Matches arrow + label under the mini</span>
       </div>
     </div>
     <p style="margin:0 0 0.35rem;color:var(--muted);font-size:0.9rem">Weapons — tap one, then press Fire to preview its arc</p>
