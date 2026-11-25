@@ -14,14 +14,13 @@ export function tileSize() {
 export function fitTiles(canvas, cols, rows) {
   const w = canvas._logicW || canvas.width;
   const h = canvas._logicH || canvas.height;
-  // Grid extents in tile units (diamond projection)
-  const unitsX = cols + rows;
-  const unitsY = cols + rows;
-  const pad = 24;
-  const maxW = Math.max(40, (w - pad * 2) / (unitsX / 2));
-  const maxH = Math.max(20, (h - pad * 2) / (unitsY / 2));
-  // Keep 2:1 diamond aspect
-  TILE_W = Math.min(88, Math.floor(Math.min(maxW, maxH * 2)));
+  // Diamond projection span: (cols+rows) half-tiles wide and tall
+  const span = (cols + rows) / 2;
+  const pad = Math.max(12, Math.min(w, h) * 0.04);
+  const maxW = Math.max(36, (w - pad * 2) / span);
+  const maxH = Math.max(18, (h - pad * 2) / span);
+  // Fill the board area; keep 2:1 diamond aspect (no artificial size cap)
+  TILE_W = Math.floor(Math.min(maxW, maxH * 2));
   TILE_H = Math.floor(TILE_W / 2);
   return tileSize();
 }
