@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1a2332">
+  <title>Web App Starter</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Web App Starter</h1>
+  </header>
+
+  <main class="app">
+    <section class="panel">
+      <p class="lede">Same pattern as the Guitar Practice App: a static site you open in the browser on desktop or iPhone.</p>
+      <p class="hint">On iPhone Safari: Share → Add to Home Screen for a full-screen app icon.</p>
+      <button type="button" id="tap-btn" class="btn">Tap me</button>
+      <p class="stat" id="tap-count" aria-live="polite">Taps: 0</p>
+    </section>
+  </main>
+
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
+    }
+  </script>
+</body>
+</html>

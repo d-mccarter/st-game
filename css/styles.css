@@ -1,0 +1,89 @@
+:root {
+  --bg: #1a2332;
+  --panel: #243044;
+  --text: #f2f5f8;
+  --muted: #9aa8b8;
+  --accent: #3d7ea6;
+  --accent-press: #2f6485;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(120% 80% at 50% -10%, #2a3b55 0%, var(--bg) 55%);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 1.25rem 1.25rem 0.5rem;
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.app {
+  flex: 1;
+  padding: 1rem 1.25rem 2rem;
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+}
+
+.panel {
+  max-width: 28rem;
+  margin: 0 auto;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 8%, transparent);
+  border-radius: 1rem;
+  padding: 1.25rem;
+}
+
+.lede {
+  margin: 0 0 0.75rem;
+  line-height: 1.45;
+}
+
+.hint {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.btn {
+  appearance: none;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.85rem 1.15rem;
+  width: 100%;
+  cursor: pointer;
+}
+
+.btn:active {
+  background: var(--accent-press);
+}
+
+.stat {
+  margin: 1rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
