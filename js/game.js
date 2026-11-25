@@ -16,6 +16,8 @@ import {
   screenToGrid,
   computeOrigin,
   fitTiles,
+  createCamera,
+  zoomAt,
 } from './board.js';
 
 let uid = 1;
@@ -127,6 +129,7 @@ export function createGame(settings) {
     activationIndex: 0,
     log: [],
     winner: null,
+    camera: createCamera(),
   };
 }
 
@@ -485,10 +488,25 @@ export function getBoardView(game) {
     fireTargets,
     showArcsWeapon: selected && weapon ? weapon : null,
     factions: FACTIONS,
+    camera: game.camera,
   };
 }
 
 export function attachBoardController(canvas, getGame, onChange) {
+  let suppressClick = false;
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let panning = false;
+  let panLast = null;
+
+  const measure = (game) => {
+    const parent = canvas.parentElement.getBoundingClientRect();
+    canvas._logicW = Math.max(200, Math.floor(parent.width));
+    canvas._logicH = Math.max(200, Math.floor(parent.height));
+    fitTiles(canvas, game.cols, game.rows, game.camera);
+    return computeOrigin(canvas, game.cols, game.rows);
+  };
+
   const paint = () => {
     const game = getGame();
     if (!game) return;
@@ -502,16 +520,24 @@ export function attachBoardController(canvas, getGame, onChange) {
       paint();
       return;
     }
+    if (suppressClick) {
+      suppressClick = false;
+      paint();
+      return;
+    }
     if (evt.preventDefault) evt.preventDefault();
 
-    // Hit-test without clearing: measure only, then always repaint
-    const parent = canvas.parentElement.getBoundingClientRect();
-    canvas._logicW = Math.max(200, Math.floor(parent.width));
-    canvas._logicH = Math.max(200, Math.floor(parent.height));
-    fitTiles(canvas, game.cols, game.rows);
+    const origin = measure(game);
     const { x, y } = eventToLogic(canvas, evt);
-    const origin = computeOrigin(canvas, game.cols, game.rows);
-    const cell = screenToGrid(x, y, origin.originX, origin.originY, game.cols, game.rows);
+    const cell = screenToGrid(
+      x,
+      y,
+      origin.originX,
+      origin.originY,
+      game.cols,
+      game.rows,
+      game.camera
+    );
 
     try {
       if (cell) {
@@ -553,22 +579,136 @@ export function attachBoardController(canvas, getGame, onChange) {
         }
       }
     } finally {
-      // resizeCanvas clears the bitmap — always redraw after any click
       paint();
     }
   };
 
   canvas.addEventListener('click', onPointer);
+
   canvas.addEventListener(
-    'touchend',
+    'wheel',
     (e) => {
-      const t = e.changedTouches?.[0];
-      if (!t) return;
+      const game = getGame();
+      if (!game) return;
       e.preventDefault();
-      onPointer(t);
+      const origin = measure(game);
+      const { x, y } = eventToLogic(canvas, e);
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      zoomAt(game.camera, x, y, origin.originX, origin.originY, factor);
+      paint();
     },
     { passive: false }
   );
+
+  const touchDist = (touches) => {
+    const a = touches[0];
+    const b = touches[1];
+    const dx = a.clientX - b.clientX;
+    const dy = a.clientY - b.clientY;
+    return Math.hypot(dx, dy);
+  };
+
+  canvas.addEventListener(
+    'touchstart',
+    (e) => {
+      const game = getGame();
+      if (!game) return;
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        pinchStartDist = touchDist(e.touches);
+        pinchStartZoom = game.camera.zoom;
+        panning = false;
+      } else if (e.touches.length === 1) {
+        panning = false;
+        panLast = { x: e.touches[0].clientX, y: e.touches[0].clientY, moved: false };
+      }
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener(
+    'touchmove',
+    (e) => {
+      const game = getGame();
+      if (!game) return;
+      if (e.touches.length === 2 && pinchStartDist > 0) {
+        e.preventDefault();
+        const origin = measure(game);
+        const rect = canvas.getBoundingClientRect();
+        const midX =
+          ((e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left) /
+          rect.width *
+          canvas._logicW;
+        const midY =
+          ((e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top) /
+          rect.height *
+          canvas._logicH;
+        const factor = touchDist(e.touches) / pinchStartDist;
+        const target = pinchStartZoom * factor;
+        const step = target / game.camera.zoom;
+        zoomAt(game.camera, midX, midY, origin.originX, origin.originY, step);
+        pinchStartDist = touchDist(e.touches);
+        pinchStartZoom = game.camera.zoom;
+        suppressClick = true;
+        paint();
+      } else if (e.touches.length === 1 && panLast && game.camera.zoom > 1.02) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - panLast.x;
+        const dy = e.touches[0].clientY - panLast.y;
+        if (Math.hypot(dx, dy) > 4) panLast.moved = true;
+        if (panLast.moved) {
+          game.camera.panX += dx / game.camera.zoom;
+          game.camera.panY += dy / game.camera.zoom;
+          panLast.x = e.touches[0].clientX;
+          panLast.y = e.touches[0].clientY;
+          suppressClick = true;
+          paint();
+        }
+      }
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener(
+    'touchend',
+    (e) => {
+      pinchStartDist = 0;
+      if (e.changedTouches?.length === 1 && !suppressClick && e.touches.length === 0) {
+        onPointer(e.changedTouches[0]);
+      }
+      if (e.touches.length === 0) {
+        panLast = null;
+        // keep suppressClick until next click cycle clears it in onPointer
+      }
+    },
+    { passive: false }
+  );
+
+  // Desktop pan when zoomed: drag with right mouse or space+left
+  canvas.addEventListener('mousedown', (e) => {
+    const game = getGame();
+    if (!game) return;
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && e.shiftKey)) {
+      e.preventDefault();
+      panning = true;
+      panLast = { x: e.clientX, y: e.clientY };
+    }
+  });
+  window.addEventListener('mousemove', (e) => {
+    const game = getGame();
+    if (!game || !panning || !panLast) return;
+    const dx = e.clientX - panLast.x;
+    const dy = e.clientY - panLast.y;
+    game.camera.panX += dx / game.camera.zoom;
+    game.camera.panY += dy / game.camera.zoom;
+    panLast = { x: e.clientX, y: e.clientY };
+    paint();
+  });
+  window.addEventListener('mouseup', () => {
+    panning = false;
+    panLast = null;
+  });
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   window.addEventListener('resize', paint);
 

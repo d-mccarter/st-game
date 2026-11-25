@@ -1,40 +1,124 @@
 /**
- * Flat-top hex grid (odd-q offset) for Starfleet Battles–style play.
+ * Hex grid (flat-top odd-q) drawn in isometric projection, with zoom/pan.
  */
 
 import { shipImage } from './ships.js';
 
-/** Hex size = center → vertex distance */
-let HEX = 36;
+/** Base hex radius in world units (before iso + zoom) */
+let HEX = 40;
 
-export function tileSize() {
-  return { w: HEX * 2, h: HEX * Math.sqrt(3), hex: HEX };
+/** Isometric projection scales (2:1 diamond feel) */
+const ISO_X = 0.8660254; // cos(30°)
+const ISO_Y = 0.5;      // sin(30°)
+
+export function createCamera() {
+  return { zoom: 1, panX: 0, panY: 0 };
 }
 
-export function fitTiles(canvas, cols, rows) {
+export function tileSize() {
+  return { hex: HEX };
+}
+
+export function fitTiles(canvas, cols, rows, _camera = { zoom: 1 }) {
   const w = canvas._logicW || canvas.width;
   const h = canvas._logicH || canvas.height;
-  const pad = Math.max(10, Math.min(w, h) * 0.03);
-  // Flat-top odd-q: width ≈ cols * 1.5*size + 0.5*size, height ≈ rows * sqrt(3)*size + 0.5*sqrt(3)*size
-  const maxByW = (w - pad * 2) / (cols * 1.5 + 0.5);
-  const maxByH = (h - pad * 2) / ((rows + 0.5) * Math.sqrt(3));
-  HEX = Math.max(18, Math.floor(Math.min(maxByW, maxByH)));
+  const pad = Math.max(8, Math.min(w, h) * 0.02);
+  // Unit extents (HEX = 1), then choose HEX so zoom=1 fills the view
+  const flatW = cols * 1.5 + 0.5;
+  const flatH = Math.sqrt(3) * (rows + 0.5);
+  const isoW = (flatW + flatH) * ISO_X;
+  const isoH = (flatW + flatH) * ISO_Y;
+  const maxByW = (w - pad * 2) / Math.max(1, isoW);
+  const maxByH = (h - pad * 2) / Math.max(1, isoH);
+  HEX = Math.max(14, Math.min(64, Math.floor(Math.min(maxByW, maxByH))));
   return tileSize();
 }
 
-/** Flat-top odd-q → screen */
-export function gridToScreen(col, row, originX, originY) {
-  const x = originX + HEX * (1.5 * col);
-  const y = originY + HEX * Math.sqrt(3) * (row + 0.5 * (col & 1));
-  return { x, y };
+function flatCenter(col, row) {
+  return {
+    wx: HEX * (1.5 * col),
+    wy: HEX * Math.sqrt(3) * (row + 0.5 * (col & 1)),
+  };
 }
 
-export function screenToGrid(px, py, originX, originY, cols, rows) {
-  // Inverse flat-top → fractional axial, then cube-round → odd-q
-  const x = (px - originX) / HEX;
-  const y = (py - originY) / HEX;
-  const q = (2 / 3) * x;
-  const r = (-1 / 3) * x + (Math.sqrt(3) / 3) * y;
+function isoProject(wx, wy) {
+  return {
+    ix: (wx - wy) * ISO_X,
+    iy: (wx + wy) * ISO_Y,
+  };
+}
+
+function isoUnproject(ix, iy) {
+  // Inverse of ix=(wx-wy)*ISO_X, iy=(wx+wy)*ISO_Y
+  const wx = (ix / ISO_X + iy / ISO_Y) / 2;
+  const wy = (iy / ISO_Y - ix / ISO_X) / 2;
+  return { wx, wy };
+}
+
+export function computeOrigin(canvas, cols, rows) {
+  const w = canvas._logicW || canvas.width;
+  const h = canvas._logicH || canvas.height;
+  // Center of iso-projected grid at pan 0
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [c, r] of [
+    [0, 0],
+    [cols - 1, 0],
+    [0, rows - 1],
+    [cols - 1, rows - 1],
+    [Math.floor(cols / 2), Math.floor(rows / 2)],
+  ]) {
+    const { wx, wy } = flatCenter(c, r);
+    const { ix, iy } = isoProject(wx, wy);
+    minX = Math.min(minX, ix);
+    maxX = Math.max(maxX, ix);
+    minY = Math.min(minY, iy);
+    maxY = Math.max(maxY, iy);
+  }
+  // Also include hex vertex extents roughly (+HEX)
+  const pad = HEX * 1.1;
+  minX -= pad;
+  maxX += pad;
+  minY -= pad;
+  maxY += pad;
+  const midX = (minX + maxX) / 2;
+  const midY = (minY + maxY) / 2;
+  return {
+    originX: w / 2 - midX,
+    originY: h / 2 - midY,
+    midX,
+    midY,
+  };
+}
+
+/** Grid → screen pixels (with camera) */
+export function gridToScreen(col, row, originX, originY, camera = { zoom: 1, panX: 0, panY: 0 }) {
+  const { wx, wy } = flatCenter(col, row);
+  const { ix, iy } = isoProject(wx, wy);
+  return {
+    x: originX + (ix + camera.panX) * camera.zoom,
+    y: originY + (iy + camera.panY) * camera.zoom,
+  };
+}
+
+/** Screen → grid (with camera) */
+export function screenToGrid(
+  px,
+  py,
+  originX,
+  originY,
+  cols,
+  rows,
+  camera = { zoom: 1, panX: 0, panY: 0 }
+) {
+  const ix = (px - originX) / camera.zoom - camera.panX;
+  const iy = (py - originY) / camera.zoom - camera.panY;
+  const { wx, wy } = isoUnproject(ix, iy);
+  // Flat-top inverse → axial → odd-q
+  const q = (2 / 3) * (wx / HEX);
+  const r = (-1 / 3) * (wx / HEX) + (Math.sqrt(3) / 3) * (wy / HEX);
   const cube = axialToCube(q, r);
   const rounded = cubeRound(cube.x, cube.y, cube.z);
   const oddq = cubeToOddQ(rounded.x, rounded.y, rounded.z);
@@ -75,7 +159,6 @@ function oddQToCube(col, row) {
   return { x, y, z };
 }
 
-/** 6 neighbors for odd-q flat-top */
 export function neighbors(col, row, cols, rows) {
   const deltas = [
     [
@@ -101,14 +184,13 @@ export function key(col, row) {
   return `${col},${row}`;
 }
 
-/** Facing 0..5 around flat-top hex (0 = E, then counter-clockwise: NE, NW, W, SW, SE) */
 const CUBE_DIRS = [
-  { x: +1, y: -1, z: 0 }, // E
-  { x: +1, y: 0, z: -1 }, // NE
-  { x: 0, y: +1, z: -1 }, // NW
-  { x: -1, y: +1, z: 0 }, // W
-  { x: -1, y: 0, z: +1 }, // SW
-  { x: 0, y: -1, z: +1 }, // SE
+  { x: +1, y: -1, z: 0 },
+  { x: +1, y: 0, z: -1 },
+  { x: 0, y: +1, z: -1 },
+  { x: -1, y: +1, z: 0 },
+  { x: -1, y: 0, z: +1 },
+  { x: 0, y: -1, z: +1 },
 ];
 
 export function facingToward(from, to) {
@@ -132,29 +214,31 @@ export function facingDelta(fromFacing, toFacing) {
 }
 
 export function relativeArc(ship, targetCell) {
-  const abs = facingToward({ col: ship.col, row: ship.row }, targetCell);
-  return facingDelta(ship.facing, abs);
+  return facingDelta(ship.facing, facingToward(ship, targetCell));
 }
 
-export function computeOrigin(canvas, cols, rows) {
-  const w = canvas._logicW || canvas.width;
-  const h = canvas._logicH || canvas.height;
-  const gridW = HEX * (cols * 1.5 + 0.5);
-  const gridH = HEX * Math.sqrt(3) * (rows + 0.5);
-  const originX = (w - gridW) / 2 + HEX;
-  const originY = (h - gridH) / 2 + HEX * Math.sqrt(3) / 2;
-  return { originX, originY, gridW, gridH };
-}
-
-function drawHex(ctx, x, y, fill, stroke) {
-  ctx.beginPath();
+/** Flat-top hex vertices in world space, then iso-projected to screen */
+function hexScreenVerts(col, row, originX, originY, camera) {
+  const { wx, wy } = flatCenter(col, row);
+  const verts = [];
   for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 180) * (60 * i); // flat-top: point at 0°
-    const px = x + HEX * Math.cos(angle);
-    const py = y + HEX * Math.sin(angle);
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
+    const angle = (Math.PI / 180) * (60 * i);
+    const vx = wx + HEX * Math.cos(angle);
+    const vy = wy + HEX * Math.sin(angle);
+    const { ix, iy } = isoProject(vx, vy);
+    verts.push({
+      x: originX + (ix + camera.panX) * camera.zoom,
+      y: originY + (iy + camera.panY) * camera.zoom,
+    });
   }
+  return verts;
+}
+
+function drawHexIso(ctx, col, row, originX, originY, camera, fill, stroke) {
+  const verts = hexScreenVerts(col, row, originX, originY, camera);
+  ctx.beginPath();
+  ctx.moveTo(verts[0].x, verts[0].y);
+  for (let i = 1; i < verts.length; i++) ctx.lineTo(verts[i].x, verts[i].y);
   ctx.closePath();
   if (fill) {
     ctx.fillStyle = fill;
@@ -162,32 +246,30 @@ function drawHex(ctx, x, y, fill, stroke) {
   }
   if (stroke) {
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1.25;
+    ctx.lineWidth = Math.max(1, 1.1 * camera.zoom);
     ctx.stroke();
   }
 }
 
-/** Screen angles for facing chevron (flat-top: 0=E …) */
 const FACING_RAD = [0, -Math.PI / 3, (-2 * Math.PI) / 3, Math.PI, (2 * Math.PI) / 3, Math.PI / 3];
 
-function drawShipSprite(ctx, ship, x, y, selected, factionColor) {
+function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
-  // Keep minis clearly smaller than a hex
-  const size = HEX * (heavy ? 1.15 : 1.0);
+  const size = HEX * camera.zoom * (heavy ? 1.05 : 0.9);
   const facing = ship.facing % 6;
   const mirror = facing === 2 || facing === 3 || facing === 4;
 
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(x, y + HEX * 0.28, HEX * 0.28, HEX * 0.14, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + size * 0.28, size * 0.28, size * 0.12, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fill();
   ctx.restore();
 
   if (img) {
     ctx.save();
-    ctx.translate(x, y - size * 0.08);
+    ctx.translate(x, y - size * 0.06);
     if (mirror) ctx.scale(-1, 1);
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
@@ -203,15 +285,16 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor) {
   }
 
   const a = FACING_RAD[facing];
-  const bx = x + Math.cos(a) * HEX * 0.42;
-  const by = y + Math.sin(a) * HEX * 0.42;
+  const bx = x + Math.cos(a) * size * 0.38;
+  const by = y + Math.sin(a) * size * 0.22;
   ctx.save();
   ctx.translate(bx, by);
   ctx.rotate(a);
+  const s = Math.max(0.7, camera.zoom);
   ctx.beginPath();
-  ctx.moveTo(5, 0);
-  ctx.lineTo(-3.5, 3);
-  ctx.lineTo(-3.5, -3);
+  ctx.moveTo(5 * s, 0);
+  ctx.lineTo(-3.5 * s, 3 * s);
+  ctx.lineTo(-3.5 * s, -3 * s);
   ctx.closePath();
   ctx.fillStyle = selected ? '#ffe08a' : '#e8f2f7';
   ctx.strokeStyle = 'rgba(0,0,0,0.55)';
@@ -221,7 +304,7 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor) {
   ctx.restore();
 }
 
-export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, blockedSet) {
+export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, blockedSet, camera) {
   if (!ship || !weapon) return;
   const arcs = new Set(weapon.arcs);
   const range = weapon.range;
@@ -234,12 +317,19 @@ export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, 
     for (const n of neighbors(cur.col, cur.row, cols, rows)) {
       const k = key(n.col, n.row);
       if (seen.has(k) || blockedSet.has(k)) continue;
-      const arc = relativeArc(ship, n);
-      if (!arcs.has(arc)) continue;
+      if (!arcs.has(relativeArc(ship, n))) continue;
       seen.add(k);
       frontier.push({ ...n, dist: cur.dist + 1 });
-      const { x, y } = gridToScreen(n.col, n.row, originX, originY);
-      drawHex(ctx, x, y, 'rgba(220, 110, 60, 0.28)', 'rgba(240, 150, 90, 0.55)');
+      drawHexIso(
+        ctx,
+        n.col,
+        n.row,
+        originX,
+        originY,
+        camera,
+        'rgba(220, 110, 60, 0.28)',
+        'rgba(240, 150, 90, 0.55)'
+      );
     }
   }
 }
@@ -255,10 +345,11 @@ export function drawBoard(ctx, state) {
     fireTargets,
     showArcsWeapon,
     factions,
+    camera = { zoom: 1, panX: 0, panY: 0 },
   } = state;
 
   const canvas = ctx.canvas;
-  fitTiles(canvas, cols, rows);
+  fitTiles(canvas, cols, rows, camera);
   const { originX, originY } = computeOrigin(canvas, cols, rows);
   const lw = canvas._logicW || canvas.width;
   const lh = canvas._logicH || canvas.height;
@@ -272,43 +363,66 @@ export function drawBoard(ctx, state) {
   const moveSet = new Set(legalMoves.map((m) => key(m.col, m.row)));
   const fireSet = new Set(fireTargets.map((m) => key(m.col, m.row)));
 
+  // Draw back-to-front for iso depth
+  const cells = [];
   for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const { x, y } = gridToScreen(c, r, originX, originY);
-      const k = key(c, r);
-      const blocked = blockedSet.has(k);
-      let fill = blocked ? 'rgba(40, 28, 22, 0.75)' : 'rgba(40, 90, 120, 0.2)';
-      let stroke = blocked ? 'rgba(120, 80, 50, 0.45)' : 'rgba(120, 180, 210, 0.35)';
-      if (moveSet.has(k)) {
-        fill = 'rgba(70, 190, 210, 0.42)';
-        stroke = 'rgba(140, 230, 250, 0.95)';
-      }
-      if (fireSet.has(k)) {
-        fill = 'rgba(210, 80, 50, 0.4)';
-        stroke = 'rgba(255, 140, 90, 0.95)';
-      }
-      drawHex(ctx, x, y, fill, stroke);
+    for (let c = 0; c < cols; c++) cells.push({ c, r });
+  }
+  cells.sort((a, b) => {
+    const sa = flatCenter(a.c, a.r);
+    const sb = flatCenter(b.c, b.r);
+    return sa.wx + sa.wy - (sb.wx + sb.wy);
+  });
+
+  for (const { c, r } of cells) {
+    const k = key(c, r);
+    const blocked = blockedSet.has(k);
+    let fill = blocked ? 'rgba(40, 28, 22, 0.78)' : 'rgba(40, 90, 120, 0.28)';
+    let stroke = blocked ? 'rgba(120, 80, 50, 0.5)' : 'rgba(140, 200, 220, 0.4)';
+    if (moveSet.has(k)) {
+      fill = 'rgba(70, 190, 210, 0.45)';
+      stroke = 'rgba(140, 230, 250, 0.95)';
     }
+    if (fireSet.has(k)) {
+      fill = 'rgba(210, 80, 50, 0.42)';
+      stroke = 'rgba(255, 140, 90, 0.95)';
+    }
+    drawHexIso(ctx, c, r, originX, originY, camera, fill, stroke);
   }
 
   const selected = ships.find((s) => s.id === selectedId && s.alive);
   if (selected && showArcsWeapon) {
-    drawFiringArcs(ctx, selected, showArcsWeapon, originX, originY, cols, rows, blockedSet);
+    drawFiringArcs(
+      ctx,
+      selected,
+      showArcsWeapon,
+      originX,
+      originY,
+      cols,
+      rows,
+      blockedSet,
+      camera
+    );
   }
 
   const ordered = [...ships]
     .filter((s) => s.alive)
-    .sort((a, b) => a.row - b.row || a.col - b.col);
-  const pip = Math.max(8, HEX * 0.45);
+    .sort((a, b) => {
+      const sa = flatCenter(a.col, a.row);
+      const sb = flatCenter(b.col, b.row);
+      return sa.wx + sa.wy - (sb.wx + sb.wy);
+    });
+
   for (const ship of ordered) {
-    const { x, y } = gridToScreen(ship.col, ship.row, originX, originY);
+    const { x, y } = gridToScreen(ship.col, ship.row, originX, originY, camera);
     const fac = factions[ship.faction];
     const selectedShip = ship.id === selectedId;
+    const pip = Math.max(8, HEX * camera.zoom * 0.4);
 
     if (selectedShip) {
       ctx.save();
       ctx.beginPath();
-      ctx.ellipse(x, y + HEX * 0.3, HEX * 0.4, HEX * 0.18, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y + HEX * camera.zoom * 0.22, HEX * camera.zoom * 0.38, HEX * camera.zoom * 0.14, 0, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(255, 214, 120, 0.95)';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
@@ -316,14 +430,14 @@ export function drawBoard(ctx, state) {
       ctx.restore();
     }
 
-    drawShipSprite(ctx, ship, x, y, selectedShip, fac.color);
+    drawShipSprite(ctx, ship, x, y, selectedShip, fac.color, camera);
 
     const ratio = ship.hull / ship.hullMax;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(x - pip / 2, y + HEX * 0.48, pip, 3);
+    ctx.fillRect(x - pip / 2, y + HEX * camera.zoom * 0.4, pip, 3);
     ctx.fillStyle = ratio > 0.4 ? '#5dce9a' : '#e2b84a';
     if (ratio <= 0.25) ctx.fillStyle = '#e35d5d';
-    ctx.fillRect(x - pip / 2, y + HEX * 0.48, pip * ratio, 3);
+    ctx.fillRect(x - pip / 2, y + HEX * camera.zoom * 0.4, pip * ratio, 3);
   }
 
   return { originX, originY };
@@ -335,9 +449,11 @@ export function resizeCanvas(canvas) {
   const w = Math.max(200, Math.floor(rect.width) || parent.clientWidth || 200);
   const h = Math.max(200, Math.floor(rect.height) || parent.clientHeight || 200);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
+  const bw = Math.floor(w * dpr);
+  const bh = Math.floor(h * dpr);
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width = bw;
+    canvas.height = bh;
   }
   canvas.style.width = '100%';
   canvas.style.height = '100%';
@@ -355,4 +471,13 @@ export function eventToLogic(canvas, evt) {
   const x = ((clientX - rect.left) / rect.width) * (canvas._logicW || rect.width);
   const y = ((clientY - rect.top) / rect.height) * (canvas._logicH || rect.height);
   return { x, y };
+}
+
+/** Zoom toward a screen point; mutates camera */
+export function zoomAt(camera, screenX, screenY, originX, originY, factor) {
+  const beforeX = (screenX - originX) / camera.zoom - camera.panX;
+  const beforeY = (screenY - originY) / camera.zoom - camera.panY;
+  camera.zoom = Math.min(3.2, Math.max(0.45, camera.zoom * factor));
+  camera.panX = (screenX - originX) / camera.zoom - beforeX;
+  camera.panY = (screenY - originY) / camera.zoom - beforeY;
 }

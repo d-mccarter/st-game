@@ -127,15 +127,15 @@ function refresh() {
   if (selected) {
     const view = getBoardView(game);
     if (game.mode === 'move' || view.legalMoves.length) {
-      phaseInfo.textContent = 'Tap a highlighted hex to move';
+      phaseInfo.textContent = 'Tap a highlighted hex to move · scroll/pinch zoom';
     } else if (game.mode === 'fire' || view.fireTargets.length) {
-      phaseInfo.textContent = 'Tap a red hex / ship to fire';
+      phaseInfo.textContent = 'Tap a red hex / ship to fire · scroll/pinch zoom';
     } else {
-      phaseInfo.textContent = 'Inspecting ship';
+      phaseInfo.textContent = 'Inspecting ship · scroll/pinch zoom';
     }
   } else {
     phaseInfo.textContent = actor?.faction === game.playerFaction
-      ? 'Select your active ship'
+      ? 'Select your active ship · scroll/pinch zoom'
       : 'Resolving hostile orders…';
   }
 
