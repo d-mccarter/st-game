@@ -31,6 +31,7 @@ const btnFire = document.getElementById('btn-fire');
 const btnWait = document.getElementById('btn-wait');
 const btnMenu = document.getElementById('btn-menu');
 const btnAgain = document.getElementById('btn-again');
+const modeHint = document.getElementById('mode-hint');
 const canvas = document.getElementById('board');
 
 let game = null;
@@ -94,7 +95,7 @@ function renderShipCard(ship) {
         <strong>${['E', 'NE', 'NW', 'W', 'SW', 'SE'][ship.facing] || ship.facing}</strong>
       </div>
     </div>
-    <p style="margin:0 0 0.35rem;color:var(--muted);font-size:0.9rem">Weapons — tap one to show its firing arc on the board</p>
+    <p style="margin:0 0 0.35rem;color:var(--muted);font-size:0.9rem">Weapons — tap one, then press Fire to preview its arc</p>
     <ul class="weapons">${weapons}</ul>
   `;
 
@@ -126,17 +127,33 @@ function refresh() {
   const selected = game.ships.find((s) => s.id === game.selectedId && s.alive);
   if (selected) {
     const view = getBoardView(game);
-    if (game.mode === 'move' || view.legalMoves.length) {
-      phaseInfo.textContent = 'Tap a highlighted hex to move · scroll/pinch zoom';
-    } else if (game.mode === 'fire' || view.fireTargets.length) {
-      phaseInfo.textContent = 'Tap a red hex / ship to fire · scroll/pinch zoom';
+    if (game.mode === 'fire' || view.fireTargets.length) {
+      phaseInfo.textContent = 'Amber = weapon arc · Red = ship you can shoot';
+      if (modeHint) {
+        modeHint.innerHTML =
+          '<strong>Fire mode:</strong> amber hexes are this weapon’s arc; red hexes have a valid target — tap one to shoot.';
+      }
+    } else if (game.mode === 'move' || view.legalMoves.length) {
+      phaseInfo.textContent = 'Cyan hexes = places this ship can move';
+      if (modeHint) {
+        modeHint.innerHTML =
+          '<strong>Move mode:</strong> cyan hexes are legal destinations — tap one to move.';
+      }
     } else {
       phaseInfo.textContent = 'Inspecting ship · scroll/pinch zoom';
+      if (modeHint) {
+        modeHint.innerHTML =
+          'Press <strong>Move</strong> for cyan destinations or <strong>Fire</strong> for amber arcs / red targets.';
+      }
     }
   } else {
     phaseInfo.textContent = actor?.faction === game.playerFaction
       ? 'Select your active ship · scroll/pinch zoom'
       : 'Resolving hostile orders…';
+    if (modeHint) {
+      modeHint.innerHTML =
+        'Press <strong>Move</strong> or <strong>Fire</strong> to show hex highlights.';
+    }
   }
 
   renderShipCard(selected || null);

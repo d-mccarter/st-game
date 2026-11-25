@@ -104,6 +104,12 @@
       <div class="play-stage">
         <div class="board-wrap">
           <canvas id="board" aria-label="Isometric battle board"></canvas>
+          <div class="board-legend" aria-hidden="true">
+            <div class="legend-item"><span class="swatch move"></span> Cyan — legal moves</div>
+            <div class="legend-item"><span class="swatch arc"></span> Amber — weapon arc</div>
+            <div class="legend-item"><span class="swatch fire"></span> Red — valid shot</div>
+            <div class="legend-item"><span class="swatch select"></span> Gold ring — selected</div>
+          </div>
         </div>
         <aside class="side-panel" id="side-panel">
           <h2>Orders</h2>
@@ -115,6 +121,7 @@
             <button type="button" class="btn" id="btn-fire" disabled>Fire</button>
             <button type="button" class="btn" id="btn-wait" disabled>End</button>
           </div>
+          <p class="mode-hint" id="mode-hint">Press <strong>Move</strong> or <strong>Fire</strong> to show hex highlights.</p>
           <div class="log-wrap">
             <h3>Tactical log</h3>
             <ul id="battle-log" class="battle-log"></ul>

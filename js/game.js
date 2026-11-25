@@ -466,15 +466,20 @@ export function getBoardView(game) {
 
   let legalMoves = [];
   let fireTargets = [];
+  let showArcsWeapon = null;
   if (selected) {
     const actor = currentActor(game);
     const controllable =
       actor && actor.id === selected.id && selected.faction === game.playerFaction;
-    if (controllable && (game.mode === 'move' || game.mode === 'select')) {
+    // One highlight mode at a time so colors stay readable
+    if (controllable && game.mode === 'move') {
       legalMoves = legalMovesFor(game, selected);
-    }
-    if (controllable && (game.mode === 'fire' || game.mode === 'select') && weapon) {
+    } else if (controllable && game.mode === 'fire' && weapon) {
       fireTargets = fireTargetsFor(game, selected, weapon);
+      showArcsWeapon = weapon;
+    } else if (controllable && game.mode === 'select' && selected.moveLeft > 0) {
+      // Default to move previews when an active ship is first selected
+      legalMoves = legalMovesFor(game, selected);
     }
   }
 
@@ -486,7 +491,7 @@ export function getBoardView(game) {
     selectedId: game.selectedId,
     legalMoves,
     fireTargets,
-    showArcsWeapon: selected && weapon ? weapon : null,
+    showArcsWeapon,
     factions: FACTIONS,
     camera: game.camera,
   };

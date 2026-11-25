@@ -1,4 +1,4 @@
-const CACHE = 'starfleet-tactics-v6';
+const CACHE = 'starfleet-tactics-v7';
 const ASSETS = [
   './',
   './index.html',
