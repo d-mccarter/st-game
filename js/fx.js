@@ -36,7 +36,7 @@ export function waitMs(ms) {
 }
 
 /** Start a move tween; resolves when finished. Ship should already be at destination logically. */
-export function startMoveTween(fx, ship, from, duration = 420) {
+export function startMoveTween(fx, ship, from, duration = 700) {
   return new Promise((resolve) => {
     const dist = Math.max(
       1,
@@ -48,7 +48,7 @@ export function startMoveTween(fx, ship, from, duration = 420) {
       toCol: ship.col,
       toRow: ship.row,
       start: performance.now(),
-      duration: Math.min(900, duration * Math.sqrt(dist)),
+      duration: Math.min(1400, Math.max(650, duration * Math.sqrt(dist))),
       done: resolve,
     };
   });
@@ -73,7 +73,7 @@ export function weaponStyle(weaponId) {
 export function startFireTween(fx, fromShip, toShip, weapon, result) {
   return new Promise((resolve) => {
     const style = weaponStyle(weapon?.id);
-    const duration = style.kind === 'bolt' ? 520 : 380;
+    const duration = style.kind === 'bolt' ? 650 : 520;
     fx.beams.push({
       fromId: fromShip.id,
       toId: toShip.id,

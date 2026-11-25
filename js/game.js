@@ -287,11 +287,13 @@ export function moveShip(game, col, row) {
   ship.moveLeft = Math.max(0, ship.moveLeft - cost);
   log(game, `${ship.name} moved to ${col},${row}.`, '');
   game.mode = ship.fired ? 'select' : 'fire';
+  // Register tween immediately so the RAF loop never starts empty
+  const moving = startMoveTween(game.fx, ship, from);
+  game._fxPulse?.();
   enqueueFx(game.fx, async () => {
-    await startMoveTween(game.fx, ship, from);
+    await moving;
     game._fxPulse?.();
   });
-  game._fxPulse?.();
   return true;
 }
 
@@ -351,8 +353,10 @@ export function fireAt(game, targetShipId, weaponId) {
   ship.fired = true;
   game.mode = 'select';
 
+  const firing = startFireTween(game.fx, ship, target, weapon, plan);
+  game._fxPulse?.();
   enqueueFx(game.fx, async () => {
-    await startFireTween(game.fx, ship, target, weapon, plan);
+    await firing;
     applyShot(target, plan);
     if (plan.hullDmg > 0) {
       log(
@@ -489,8 +493,9 @@ function runAiActivation(game, ship) {
       ship.row = best.row;
       ship.moveLeft = Math.max(0, ship.moveLeft - cost);
       log(game, `${ship.name} closes to ${best.col},${best.row}.`, '');
+      const moving = startMoveTween(game.fx, ship, from);
       game._fxPulse?.();
-      await startMoveTween(game.fx, ship, from);
+      await moving;
     }
 
     const def = shipDef(ship);
@@ -500,8 +505,9 @@ function runAiActivation(game, ship) {
       const t = game.ships.find((s) => s.id === targets[0].shipId && s.alive);
       if (t) {
         const plan = planShot(ship, t, weapon, 0);
+        const firing = startFireTween(game.fx, ship, t, weapon, plan);
         game._fxPulse?.();
-        await startFireTween(game.fx, ship, t, weapon, plan);
+        await firing;
         applyShot(t, plan);
         log(
           game,
