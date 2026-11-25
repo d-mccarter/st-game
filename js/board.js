@@ -131,10 +131,6 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor) {
   if (img) {
     ctx.save();
     ctx.translate(x, y - size * 0.12);
-    if (selected) {
-      ctx.shadowColor = 'rgba(255, 220, 120, 0.9)';
-      ctx.shadowBlur = 18;
-    }
     if (mirror) ctx.scale(-1, 1);
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
@@ -253,7 +249,15 @@ export function drawBoard(ctx, state) {
     const selectedShip = ship.id === selectedId;
 
     if (selectedShip) {
-      drawDiamond(ctx, x, y, 'rgba(255, 220, 120, 0.2)', 'rgba(255, 220, 120, 0.85)');
+      // Thin stand ring — reads as selection, not ship glow / move highlight
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(x, y + TILE_H * 0.2, TILE_W * 0.38, TILE_H * 0.26, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 214, 120, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.restore();
     }
 
     drawShipSprite(ctx, ship, x, y, selectedShip, fac.color);

@@ -37,13 +37,19 @@ function occupiedSet(ships, exceptId = null) {
 
 function spawnLine(faction, fleetCounts, side, map) {
   const ships = [];
-  const row = side === 'west' ? 1 : map.rows - 2;
+  // Stagger rows so large mini sprites don't stack on top of each other
+  const baseRow = side === 'west' ? 1 : map.rows - 2;
   let col = 1;
+  let slot = 0;
   const facing = side === 'west' ? 1 : 4;
   for (const [typeId, count] of Object.entries(fleetCounts)) {
     const def = SHIP_TYPES[typeId];
     if (!def || def.faction !== faction) continue;
     for (let i = 0; i < count; i++) {
+      const row = Math.min(
+        map.rows - 1,
+        Math.max(0, baseRow + (slot % 2 === 0 ? 0 : side === 'west' ? 1 : -1))
+      );
       while (
         col < map.cols - 1 &&
         map.blocked.some(([c, r]) => c === col && r === row)
@@ -69,7 +75,9 @@ function spawnLine(faction, fleetCounts, side, map) {
         alive: true,
         overload: false,
       });
-      col += 1;
+      // Leave an empty hex between minis so stands don't overlap
+      col += 2;
+      slot += 1;
     }
   }
   return ships;
