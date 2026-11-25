@@ -251,45 +251,55 @@ function drawHexIso(ctx, col, row, originX, originY, camera, fill, stroke) {
   }
 }
 
+/** Screen angles for facings E, NE, NW, W, SW, SE (canvas Y-down). */
 const FACING_RAD = [0, -Math.PI / 3, (-2 * Math.PI) / 3, Math.PI, (2 * Math.PI) / 3, Math.PI / 3];
+/** All ship PNGs are drawn with the bow toward bottom-left ≈ SW. */
+const ART_NOSE_RAD = FACING_RAD[4];
 
 function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
   const size = HEX * camera.zoom * (heavy ? 1.05 : 0.9);
-  const facing = ship.facing % 6;
-  const mirror = facing === 2 || facing === 3 || facing === 4;
+  const facing = ((ship.facing % 6) + 6) % 6;
+  const heading = FACING_RAD[facing];
 
+  // Fixed ground shadow under the stand (does not spin with the hull)
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(x, y + size * 0.28, size * 0.28, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + size * 0.22, size * 0.28, size * 0.12, 0, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fill();
   ctx.restore();
 
   if (img) {
     ctx.save();
-    ctx.translate(x, y - size * 0.06);
-    if (mirror) ctx.scale(-1, 1);
+    ctx.translate(x, y - size * 0.04);
+    // Rotate so the painted bow matches the detail-panel facing
+    ctx.rotate(heading - ART_NOSE_RAD);
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
   } else {
-    const a = FACING_RAD[facing];
     ctx.beginPath();
-    ctx.moveTo(x + Math.cos(a) * size * 0.4, y + Math.sin(a) * size * 0.4);
-    ctx.lineTo(x + Math.cos(a + 2.4) * size * 0.25, y + Math.sin(a + 2.4) * size * 0.25);
-    ctx.lineTo(x + Math.cos(a - 2.4) * size * 0.25, y + Math.sin(a - 2.4) * size * 0.25);
+    ctx.moveTo(x + Math.cos(heading) * size * 0.4, y + Math.sin(heading) * size * 0.4);
+    ctx.lineTo(
+      x + Math.cos(heading + 2.4) * size * 0.25,
+      y + Math.sin(heading + 2.4) * size * 0.25
+    );
+    ctx.lineTo(
+      x + Math.cos(heading - 2.4) * size * 0.25,
+      y + Math.sin(heading - 2.4) * size * 0.25
+    );
     ctx.closePath();
     ctx.fillStyle = factionColor;
     ctx.fill();
   }
 
-  const a = FACING_RAD[facing];
-  const bx = x + Math.cos(a) * size * 0.38;
-  const by = y + Math.sin(a) * size * 0.22;
+  // Facing chevron — same heading as the detail window
+  const bx = x + Math.cos(heading) * size * 0.42;
+  const by = y + Math.sin(heading) * size * 0.42;
   ctx.save();
   ctx.translate(bx, by);
-  ctx.rotate(a);
+  ctx.rotate(heading);
   const s = Math.max(0.7, camera.zoom);
   ctx.beginPath();
   ctx.moveTo(5 * s, 0);
