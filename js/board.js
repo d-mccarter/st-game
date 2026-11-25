@@ -161,25 +161,35 @@ function oddQToCube(col, row) {
   return { x, y, z };
 }
 
+/** Odd-q flat-top neighbor deltas indexed by facing 0=E … 5=SE. */
+const NEIGHBOR_DELTAS = [
+  [
+    [+1, 0], [+1, -1], [0, -1],
+    [-1, -1], [-1, 0], [0, +1],
+  ],
+  [
+    [+1, +1], [+1, 0], [0, -1],
+    [-1, 0], [-1, +1], [0, +1],
+  ],
+];
+
 export function neighbors(col, row, cols, rows) {
-  const deltas = [
-    [
-      [+1, 0], [+1, -1], [0, -1],
-      [-1, -1], [-1, 0], [0, +1],
-    ],
-    [
-      [+1, +1], [+1, 0], [0, -1],
-      [-1, 0], [-1, +1], [0, +1],
-    ],
-  ];
-  const parity = col & 1;
   const out = [];
-  for (const [dc, dr] of deltas[parity]) {
+  for (const [dc, dr] of NEIGHBOR_DELTAS[col & 1]) {
     const c = col + dc;
     const r = row + dr;
     if (c >= 0 && r >= 0 && c < cols && r < rows) out.push({ col: c, row: r });
   }
   return out;
+}
+
+/** Neighbor hex in the given facing, or null if off-map. */
+export function hexInFacing(col, row, facing, cols, rows) {
+  const [dc, dr] = NEIGHBOR_DELTAS[col & 1][((facing % 6) + 6) % 6];
+  const c = col + dc;
+  const r = row + dr;
+  if (c < 0 || r < 0 || c >= cols || r >= rows) return null;
+  return { col: c, row: r };
 }
 
 export function key(col, row) {

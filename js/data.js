@@ -31,6 +31,8 @@ export const SHIP_TYPES = {
     hull: 10,
     shields: 8,
     move: 3,
+    /** SFB turn mode: hexes that must be moved straight before another turn */
+    turnMode: 2,
     weapons: [
       { id: 'phaser', name: 'Phasers', damage: 2, range: 3, arcs: [0, 1, 5] },
       { id: 'photon', name: 'Photon Torpedoes', damage: 4, range: 4, arcs: [0] },
@@ -44,6 +46,7 @@ export const SHIP_TYPES = {
     hull: 6,
     shields: 5,
     move: 4,
+    turnMode: 1,
     weapons: [
       { id: 'phaser', name: 'Phasers', damage: 2, range: 3, arcs: [0, 1, 5] },
       { id: 'photon', name: 'Photon Torpedoes', damage: 3, range: 3, arcs: [0] },
@@ -57,6 +60,7 @@ export const SHIP_TYPES = {
     hull: 9,
     shields: 7,
     move: 3,
+    turnMode: 2,
     weapons: [
       { id: 'disruptor', name: 'Disruptors', damage: 3, range: 3, arcs: [0, 1, 5] },
       { id: 'photon', name: 'Photon Torpedoes', damage: 4, range: 4, arcs: [0] },
@@ -70,6 +74,7 @@ export const SHIP_TYPES = {
     hull: 5,
     shields: 4,
     move: 4,
+    turnMode: 1,
     weapons: [
       { id: 'disruptor', name: 'Disruptors', damage: 2, range: 3, arcs: [0, 1, 5] },
       { id: 'drone', name: 'Drone Rack', damage: 3, range: 3, arcs: [0] },

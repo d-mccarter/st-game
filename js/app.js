@@ -8,6 +8,8 @@ import {
   selectShip,
   holdOrders,
   endActivation,
+  turnShip,
+  canTurnShip,
   FACTIONS,
   ARC_LABELS,
   getBoardView,
@@ -29,6 +31,8 @@ const ruleTags = document.getElementById('rule-tags');
 const btnMove = document.getElementById('btn-move');
 const btnFire = document.getElementById('btn-fire');
 const btnWait = document.getElementById('btn-wait');
+const btnTurnPort = document.getElementById('btn-turn-port');
+const btnTurnStarboard = document.getElementById('btn-turn-starboard');
 const btnMenu = document.getElementById('btn-menu');
 const btnAgain = document.getElementById('btn-again');
 const modeHint = document.getElementById('mode-hint');
@@ -94,6 +98,14 @@ function renderShipCard(ship) {
         <span>Facing</span>
         <strong>${['E', 'NE', 'NW', 'W', 'SW', 'SE'][ship.facing] || ship.facing}</strong>
       </div>
+      <div class="stat">
+        <span>Turn mode</span>
+        <strong>${def.turnMode || 1}</strong>
+      </div>
+      <div class="stat">
+        <span>Since turn</span>
+        <strong>${ship.hexesSinceTurn || 0} hex</strong>
+      </div>
     </div>
     <p style="margin:0 0 0.35rem;color:var(--muted);font-size:0.9rem">Weapons — tap one, then press Fire to preview its arc</p>
     <ul class="weapons">${weapons}</ul>
@@ -137,13 +149,13 @@ function refresh() {
       phaseInfo.textContent = 'Cyan hexes = places this ship can move';
       if (modeHint) {
         modeHint.innerHTML =
-          '<strong>Move mode:</strong> cyan hexes are legal destinations — tap one to move.';
+          '<strong>Move mode:</strong> cyan hexes are straight ahead only. Use <strong>Port / Starboard</strong> to turn (1 move + turn mode).';
       }
     } else {
       phaseInfo.textContent = 'Inspecting ship · scroll/pinch zoom';
       if (modeHint) {
         modeHint.innerHTML =
-          'Press <strong>Move</strong> for cyan destinations or <strong>Fire</strong> for amber arcs / red targets.';
+          '<strong>Port / Starboard</strong> turn 60° (SFB turn mode). <strong>Move</strong> advances forward; <strong>Fire</strong> shows arcs.';
       }
     }
   } else {
@@ -168,6 +180,9 @@ function refresh() {
   btnMove.disabled = !controllable || selected.moveLeft <= 0;
   btnFire.disabled = !controllable || selected.fired;
   btnWait.disabled = !controllable;
+  const canTurn = controllable && canTurnShip(game, selected);
+  btnTurnPort.disabled = !canTurn;
+  btnTurnStarboard.disabled = !canTurn;
 
   boardApi?.paint();
 
@@ -242,6 +257,16 @@ btnFire.addEventListener('click', () => {
   game.activeWeaponId = game.activeWeaponId || getShipDef(ship).weapons[0].id;
   game.mode = 'fire';
   refresh();
+});
+
+btnTurnPort.addEventListener('click', () => {
+  if (!game) return;
+  if (turnShip(game, -1)) refresh();
+});
+
+btnTurnStarboard.addEventListener('click', () => {
+  if (!game) return;
+  if (turnShip(game, 1)) refresh();
 });
 
 btnWait.addEventListener('click', () => {

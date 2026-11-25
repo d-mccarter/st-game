@@ -566,6 +566,11 @@ legend {
   margin-top: 0.85rem;
 }
 
+.order-row.turn-row {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0.65rem;
+}
+
 .battle-log {
   margin: 0;
   padding: 0;

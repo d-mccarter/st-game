@@ -125,12 +125,16 @@
           <div id="selected-card" class="ship-card empty">
             <p>Select one of your ships to move or fire.</p>
           </div>
+          <div class="order-row turn-row">
+            <button type="button" class="btn" id="btn-turn-port" disabled title="Turn port (left) — 1 move, requires turn mode">⟲ Port</button>
+            <button type="button" class="btn" id="btn-turn-starboard" disabled title="Turn starboard (right) — 1 move, requires turn mode">Starboard ⟳</button>
+          </div>
           <div class="order-row">
             <button type="button" class="btn" id="btn-move" disabled>Move</button>
             <button type="button" class="btn" id="btn-fire" disabled>Fire</button>
             <button type="button" class="btn" id="btn-wait" disabled>End</button>
           </div>
-          <p class="mode-hint" id="mode-hint">Press <strong>Move</strong> or <strong>Fire</strong> to show hex highlights.</p>
+          <p class="mode-hint" id="mode-hint">Press <strong>Move</strong> or <strong>Fire</strong> to show hex highlights. Turns use SFB turn mode.</p>
           <div class="log-wrap">
             <h3>Tactical log</h3>
             <ul id="battle-log" class="battle-log"></ul>

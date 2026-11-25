@@ -62,6 +62,7 @@ export function initSetup(root, onStart) {
           <span class="chip">Hull ${ship.hull}</span>
           <span class="chip">Shields ${ship.shields}</span>
           <span class="chip">Move ${ship.move}</span>
+          <span class="chip">TM ${ship.turnMode || 1}</span>
           <span class="chip">${ship.weapons.map((w) => w.name).join(' / ')}</span>
         </div>
       `;

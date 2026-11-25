@@ -10,7 +10,9 @@ import {
   neighbors,
   key,
   facingToward,
+  facingDelta,
   relativeArc,
+  hexInFacing,
   drawBoard,
   resizeCanvas,
   eventToLogic,
@@ -83,6 +85,7 @@ function spawnLine(faction, fleetCounts, side, map) {
         shields: def.shields,
         shieldsMax: def.shields,
         moveLeft: 0,
+        hexesSinceTurn: 0,
         fired: false,
         activated: false,
         alive: true,
@@ -189,6 +192,8 @@ export function beginRound(game) {
     const def = shipDef(s);
     const overloadPenalty = s.overload ? 1 : 0;
     s.moveLeft = Math.max(1, def.move - overloadPenalty);
+    // SFB: turn mode is satisfied at the start of the turn
+    s.hexesSinceTurn = def.turnMode || 1;
     s.fired = false;
     s.activated = false;
     s.overload = false;
@@ -198,6 +203,10 @@ export function beginRound(game) {
   log(game, `Round ${game.round} — allocate movement and fire.`, '');
 }
 
+/**
+ * SFB-style movement: only straight ahead along current facing.
+ * Turns are separate orders (see turnShip).
+ */
 export function legalMovesFor(game, ship) {
   if (!ship || !ship.alive || ship.moveLeft <= 0) return [];
   const occ = occupiedSet(game.ships, ship.id);
@@ -206,23 +215,28 @@ export function legalMovesFor(game, ship) {
   if (maxSteps <= 0) return [];
 
   const results = [];
-  const seen = new Map([[key(ship.col, ship.row), 0]]);
-  const q = [{ col: ship.col, row: ship.row, dist: 0 }];
-
-  while (q.length) {
-    const cur = q.shift();
-    if (cur.dist >= maxSteps) continue;
-    for (const n of neighbors(cur.col, cur.row, game.cols, game.rows)) {
-      const k = key(n.col, n.row);
-      if (game.blockedSet.has(k) || occ.has(k)) continue;
-      const nd = cur.dist + 1;
-      if (seen.has(k) && seen.get(k) <= nd) continue;
-      seen.set(k, nd);
-      q.push({ ...n, dist: nd });
-      results.push({ col: n.col, row: n.row, dist: nd });
-    }
+  let col = ship.col;
+  let row = ship.row;
+  for (let step = 1; step <= maxSteps; step++) {
+    const next = hexInFacing(col, row, ship.facing, game.cols, game.rows);
+    if (!next) break;
+    const k = key(next.col, next.row);
+    if (game.blockedSet.has(k) || occ.has(k)) break;
+    col = next.col;
+    row = next.row;
+    results.push({ col, row, dist: step });
   }
   return results;
+}
+
+/** True if the ship can spend 1 MP on a 60° facing change under SFB turn mode. */
+export function canTurnShip(game, ship) {
+  if (!ship || !ship.alive || fxBusy(game.fx)) return false;
+  const actor = currentActor(game);
+  if (!actor || actor.id !== ship.id || ship.faction !== game.playerFaction) return false;
+  if (ship.moveLeft < 1) return false;
+  const tm = shipDef(ship).turnMode || 1;
+  return (ship.hexesSinceTurn || 0) >= tm;
 }
 
 export function fireTargetsFor(game, ship, weapon) {
@@ -282,19 +296,42 @@ export function moveShip(game, col, row) {
   if (!hit) return false;
   const cost = hit.dist * game.map.moveCost;
   const from = { col: ship.col, row: ship.row };
-  ship.facing = facingToward(from, { col, row });
+  // Facing is unchanged by forward movement (SFB: turns are separate)
   ship.col = col;
   ship.row = row;
   ship.moveLeft = Math.max(0, ship.moveLeft - cost);
+  ship.hexesSinceTurn = (ship.hexesSinceTurn || 0) + hit.dist;
   log(game, `${ship.name} moved to ${col},${row}.`, '');
   game.mode = ship.fired ? 'select' : 'fire';
-  // Register tween immediately so the RAF loop never starts empty
   const moving = startMoveTween(game.fx, ship, from);
   game._fxPulse?.();
   enqueueFx(game.fx, async () => {
     await moving;
     game._fxPulse?.();
   });
+  return true;
+}
+
+/**
+ * Change facing by one hexside (60°).
+ * @param {number} dir -1 = port (left / counterclockwise on the hex), +1 = starboard
+ */
+export function turnShip(game, dir) {
+  if (fxBusy(game.fx)) return false;
+  const ship = game.ships.find((s) => s.id === game.selectedId);
+  if (!ship || !canTurnShip(game, ship)) return false;
+  const step = dir < 0 ? -1 : 1;
+  ship.facing = (((ship.facing + step) % 6) + 6) % 6;
+  ship.moveLeft = Math.max(0, ship.moveLeft - 1);
+  ship.hexesSinceTurn = 0;
+  const label = ['E', 'NE', 'NW', 'W', 'SW', 'SE'][ship.facing];
+  log(
+    game,
+    `${ship.name} turns ${step < 0 ? 'port' : 'starboard'} → ${label}.`,
+    ''
+  );
+  game.mode = ship.moveLeft > 0 ? 'move' : ship.fired ? 'select' : 'fire';
+  game._fxPulse?.();
   return true;
 }
 
@@ -467,8 +504,13 @@ function finishAiShip(game, ship) {
   }
 }
 
+function aiCanTurn(ship) {
+  const tm = shipDef(ship).turnMode || 1;
+  return ship.moveLeft >= 1 && (ship.hexesSinceTurn || 0) >= tm;
+}
+
 function runAiActivation(game, ship) {
-  // Animate AI move + fire on the FX queue so player input stays locked
+  // Animate AI turn / move / fire on the FX queue so player input stays locked
   enqueueFx(game.fx, async () => {
     const enemies = living(game, game.playerFaction);
     if (!enemies.length) {
@@ -479,6 +521,25 @@ function runAiActivation(game, ship) {
     const prey = enemies[0];
     game.selectedId = ship.id;
 
+    // Turn toward the prey (SFB: 1 MP + turn mode per hexside)
+    const desired = facingToward(ship, prey);
+    let guard = 0;
+    while (ship.facing !== desired && aiCanTurn(ship) && guard++ < 6) {
+      const cw = facingDelta(ship.facing, desired);
+      const step = cw <= 3 ? 1 : -1;
+      ship.facing = (((ship.facing + step) % 6) + 6) % 6;
+      ship.moveLeft -= 1;
+      ship.hexesSinceTurn = 0;
+      log(
+        game,
+        `${ship.name} turns ${step < 0 ? 'port' : 'starboard'} → ${['E', 'NE', 'NW', 'W', 'SW', 'SE'][ship.facing]}.`,
+        ''
+      );
+      game._fxPulse?.();
+      await waitMs(220);
+    }
+
+    // Advance straight ahead if that closes distance
     const moves = legalMovesFor(game, ship);
     if (moves.length) {
       moves.sort(
@@ -487,16 +548,20 @@ function runAiActivation(game, ship) {
           hexApproxDist({ col: b.col, row: b.row }, prey)
       );
       const best = moves[0];
-      const from = { col: ship.col, row: ship.row };
-      ship.facing = facingToward(ship, best);
-      const cost = best.dist * game.map.moveCost;
-      ship.col = best.col;
-      ship.row = best.row;
-      ship.moveLeft = Math.max(0, ship.moveLeft - cost);
-      log(game, `${ship.name} closes to ${best.col},${best.row}.`, '');
-      const moving = startMoveTween(game.fx, ship, from);
-      game._fxPulse?.();
-      await moving;
+      const here = hexApproxDist(ship, prey);
+      const there = hexApproxDist(best, prey);
+      if (there < here || there === here) {
+        const from = { col: ship.col, row: ship.row };
+        const cost = best.dist * game.map.moveCost;
+        ship.col = best.col;
+        ship.row = best.row;
+        ship.moveLeft = Math.max(0, ship.moveLeft - cost);
+        ship.hexesSinceTurn = (ship.hexesSinceTurn || 0) + best.dist;
+        log(game, `${ship.name} closes to ${best.col},${best.row}.`, '');
+        const moving = startMoveTween(game.fx, ship, from);
+        game._fxPulse?.();
+        await moving;
+      }
     }
 
     const def = shipDef(ship);
