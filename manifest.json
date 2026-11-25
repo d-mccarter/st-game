@@ -1,12 +1,12 @@
 {
-  "name": "Web App Starter",
-  "short_name": "Starter",
-  "description": "Static PWA starter — open in browser or Add to Home Screen on iOS",
+  "name": "Starfleet Tactics",
+  "short_name": "Starfleet",
+  "description": "Simplified Starfleet Battles on an isometric board",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#1a2332",
-  "theme_color": "#1a2332",
-  "orientation": "portrait",
+  "background_color": "#071018",
+  "theme_color": "#071018",
+  "orientation": "any",
   "icons": [
     {
       "src": "icons/icon-192.png",

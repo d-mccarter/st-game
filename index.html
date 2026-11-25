@@ -5,27 +5,134 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#1a2332">
-  <title>Web App Starter</title>
+  <meta name="theme-color" content="#071018">
+  <title>Starfleet Tactics</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header class="app-header">
-    <h1>Web App Starter</h1>
-  </header>
+  <div id="app">
+    <!-- SETUP -->
+    <section id="screen-setup" class="screen active" aria-label="Game setup">
+      <div class="setup-shell">
+        <header class="brand-block">
+          <p class="eyebrow">Graphical tabletop</p>
+          <h1>Starfleet Tactics</h1>
+          <p class="lede">A simplified Starfleet Battles duel. Pick your fleet, then fight on an isometric star map.</p>
+        </header>
 
-  <main class="app">
-    <section class="panel">
-      <p class="lede">Same pattern as the Guitar Practice App: a static site you open in the browser on desktop or iPhone.</p>
-      <p class="hint">On iPhone Safari: Share → Add to Home Screen for a full-screen app icon.</p>
-      <button type="button" id="tap-btn" class="btn">Tap me</button>
-      <p class="stat" id="tap-count" aria-live="polite">Taps: 0</p>
+        <form id="setup-form" class="setup-form">
+          <fieldset>
+            <legend>Match</legend>
+            <label class="field">
+              <span>Starting points</span>
+              <select name="points" id="opt-points">
+                <option value="100">100 — skirmish</option>
+                <option value="150" selected>150 — standard</option>
+                <option value="200">200 — fleet action</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Your faction</span>
+              <select name="faction" id="opt-faction">
+                <option value="federation">United Federation of Planets</option>
+                <option value="klingon">Klingon Empire</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Map type</span>
+              <select name="map" id="opt-map">
+                <option value="void">Open Void</option>
+                <option value="asteroids">Asteroid Field</option>
+                <option value="nebula">Nebula Drift</option>
+              </select>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Custom rules</legend>
+            <label class="check">
+              <input type="checkbox" name="ruleAlternating" id="opt-alt" checked>
+              <span>Alternating ship activations</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" name="ruleOverload" id="opt-overload">
+              <span>Allow weapon overload (+1 dmg, −1 move)</span>
+            </label>
+            <label class="check">
+              <input type="checkbox" name="ruleRetreat" id="opt-retreat" checked>
+              <span>Allow voluntary disengage (edge hexes)</span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Fleet build <span id="fleet-budget" class="budget">0 / 150</span></legend>
+            <p class="hint" id="fleet-hint">Spend points on ships. Opponent gets a mirrored counter-fleet.</p>
+            <div id="fleet-builder" class="fleet-builder"></div>
+          </fieldset>
+
+          <p id="setup-error" class="error" hidden></p>
+          <button type="submit" class="btn primary" id="btn-start">Engage</button>
+        </form>
+      </div>
     </section>
-  </main>
 
-  <script src="js/app.js"></script>
+    <!-- PLAY -->
+    <section id="screen-play" class="screen" aria-label="Battle map" hidden>
+      <header class="play-hud">
+        <div class="hud-left">
+          <button type="button" class="btn ghost" id="btn-menu">Setup</button>
+          <div class="turn-pill">
+            <span class="turn-label">Activation</span>
+            <strong id="turn-info">—</strong>
+          </div>
+        </div>
+        <div class="hud-center">
+          <span id="map-name">Open Void</span>
+          <span class="sep">·</span>
+          <span id="phase-info">Select a ship</span>
+        </div>
+        <div class="hud-right">
+          <span id="rule-tags" class="rule-tags"></span>
+        </div>
+      </header>
+
+      <div class="play-stage">
+        <canvas id="board" width="960" height="640" aria-label="Isometric battle board"></canvas>
+        <aside class="side-panel" id="side-panel">
+          <h2>Orders</h2>
+          <div id="selected-card" class="ship-card empty">
+            <p>Select one of your ships to move or fire.</p>
+          </div>
+          <div class="order-row">
+            <button type="button" class="btn" id="btn-move" disabled>Move</button>
+            <button type="button" class="btn" id="btn-fire" disabled>Fire</button>
+            <button type="button" class="btn" id="btn-wait" disabled>End</button>
+          </div>
+          <div class="log-wrap">
+            <h3>Tactical log</h3>
+            <ul id="battle-log" class="battle-log"></ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="screen-result" class="screen" hidden aria-label="Battle result">
+      <div class="result-card">
+        <p class="eyebrow" id="result-eyebrow">Engagement complete</p>
+        <h2 id="result-title">Victory</h2>
+        <p id="result-body">All hostile vessels destroyed.</p>
+        <button type="button" class="btn primary" id="btn-again">Return to setup</button>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});

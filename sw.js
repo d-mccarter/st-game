@@ -1,9 +1,13 @@
-const CACHE = 'web-app-starter-v1';
+const CACHE = 'starfleet-tactics-v1';
 const ASSETS = [
   './',
   './index.html',
   './css/styles.css',
   './js/app.js',
+  './js/setup.js',
+  './js/game.js',
+  './js/board.js',
+  './js/data.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png'

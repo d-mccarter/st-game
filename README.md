@@ -1,35 +1,33 @@
-# st-game
+# Starfleet Tactics
 
-Static web app hosted on **GitHub Pages** — same pattern as [Guitar Practice App](https://github.com/d-mccarter/Guitar-Practice-App).
+Simplified graphical **Starfleet Battles** you can open as a webpage (desktop or iPhone).
 
-**Live site (after you enable Pages once):** https://d-mccarter.github.io/st-game/
+**Repo:** https://github.com/d-mccarter/st-game  
+**Pages:** https://d-mccarter.github.io/st-game/ (enable Pages once — see below)
 
-Open that URL on desktop, or on iPhone Safari tap **Share → Add to Home Screen**.
+## What’s in v1
 
-## Enable Pages (one-time — you must click this)
+1. **Setup** — starting points, faction, map type, custom rules, fleet builder  
+2. **Isometric board** — diamond-tile map (void / asteroids / nebula)  
+3. **Two factions × two ships** — Federation Constitution & Miranda; Klingon D7 & F5  
+4. **Tap / click movement** — legal move hexes highlight when your ship is selected  
+5. **Ship intel** — hull, shields, weapons; firing arcs drawn on the board  
 
-I pushed the site but GitHub blocks the API from turning Pages on. Do this once:
+## How to play
 
-1. Open **https://github.com/d-mccarter/st-game/settings/pages**
-2. Under **Build and deployment → Source**, choose **Deploy from a branch**
-3. Branch: **`main`** · Folder: **`/` (root)** · **Save**
+1. Configure the match and spend points on ships → **Engage**  
+2. Tap your active ship — cyan hexes show legal moves  
+3. Tap a cyan hex to move  
+4. Tap a weapon in the side panel to show its firing arc; red hexes are valid targets  
+5. Tap an enemy / red hex to fire · press **End** to finish that ship’s activation  
 
-Wait ~1 minute, then open https://d-mccarter.github.io/st-game/
-
-## What’s in the repo
-
-| File | Role |
-| --- | --- |
-| `index.html` | Page shell + Apple / PWA meta tags |
-| `css/`, `js/` | Styles and app logic |
-| `manifest.json` + `icons/` | Install name, icons, standalone display |
-| `sw.js` | Service worker cache |
-| `.nojekyll` | Tells Pages not to run Jekyll |
-
-No build step. Data stays in the browser via `localStorage`.
-
-## Local development
+## Local
 
 ```bash
 npx --yes serve .
 ```
+
+## Enable GitHub Pages (once)
+
+1. https://github.com/d-mccarter/st-game/settings/pages  
+2. **Deploy from a branch** → `main` / `/ (root)` → Save  
