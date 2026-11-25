@@ -155,11 +155,20 @@ function cubeToOddQ(x, _y, z) {
   return { col, row };
 }
 
-function oddQToCube(col, row) {
+export function oddQToCube(col, row) {
   const x = col;
   const z = row - (col - (col & 1)) / 2;
   const y = -x - z;
   return { x, y, z };
+}
+
+/** True hex distance on the odd-q grid. */
+export function hexDistance(a, b) {
+  const A = oddQToCube(a.col, a.row);
+  const B = oddQToCube(b.col, b.row);
+  return (
+    (Math.abs(A.x - B.x) + Math.abs(A.y - B.y) + Math.abs(A.z - B.z)) / 2
+  );
 }
 
 /** Odd-q flat-top neighbor deltas indexed by facing 0=E … 5=SE. */

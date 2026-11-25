@@ -13,6 +13,7 @@ import {
   facingDelta,
   relativeArc,
   hexInFacing,
+  hexDistance,
   drawBoard,
   resizeCanvas,
   eventToLogic,
@@ -245,21 +246,16 @@ export function fireTargetsFor(game, ship, weapon) {
   const targets = [];
   for (const other of living(game)) {
     if (other.faction === ship.faction) continue;
-    const dist = hexApproxDist(ship, other);
+    const dist = hexDistance(ship, other);
     if (dist < 1 || dist > weapon.range) continue;
     // Must be reachable via arc cells — check relative arc of target cell
     const arc = relativeArc(ship, { col: other.col, row: other.row });
     if (!arcs.has(arc)) continue;
     // Line roughly clear of asteroids (simplified: skip if any blocked on short path)
     if (blockedBetween(game, ship, other)) continue;
-    targets.push({ col: other.col, row: other.row, shipId: other.id });
+    targets.push({ col: other.col, row: other.row, shipId: other.id, dist });
   }
   return targets;
-}
-
-function hexApproxDist(a, b) {
-  // On this diamond grid, use BFS distance
-  return Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
 }
 
 function blockedBetween(game, a, b) {
@@ -439,14 +435,15 @@ export function fireAt(game, targetShipId, weaponId) {
 
 export function holdOrders(game) {
   if (fxBusy(game.fx)) return false;
-  const ship = game.ships.find((s) => s.id === game.selectedId);
   const actor = currentActor(game);
-  if (!ship || !actor || actor.id !== ship.id) return false;
-  if (ship.faction !== game.playerFaction) return false;
+  if (!actor || actor.faction !== game.playerFaction) return false;
+  // Prefer selected ship if it's the actor; otherwise end the current actor
+  let ship = game.ships.find((s) => s.id === game.selectedId);
+  if (!ship || ship.id !== actor.id) ship = actor;
   ship.moveLeft = 0;
   ship.fired = true;
   ship.activated = true;
-  log(game, `${ship.name} holds position.`, '');
+  log(game, `${ship.name} ends activation.`, '');
   game.selectedId = null;
   game.mode = 'select';
   afterActivation(game);
@@ -455,14 +452,7 @@ export function holdOrders(game) {
 
 export function endActivation(game) {
   if (fxBusy(game.fx)) return;
-  const ship = game.ships.find((s) => s.id === game.selectedId) || currentActor(game);
-  if (!ship) return;
-  if (ship.faction !== game.playerFaction) return;
-  ship.activated = true;
-  ship.moveLeft = 0;
-  game.selectedId = null;
-  game.mode = 'select';
-  afterActivation(game);
+  holdOrders(game);
 }
 
 function afterActivation(game) {
@@ -517,7 +507,7 @@ function runAiActivation(game, ship) {
       finishAiShip(game, ship);
       return;
     }
-    enemies.sort((a, b) => hexApproxDist(ship, a) - hexApproxDist(ship, b));
+    enemies.sort((a, b) => hexDistance(ship, a) - hexDistance(ship, b));
     const prey = enemies[0];
     game.selectedId = ship.id;
 
@@ -544,12 +534,12 @@ function runAiActivation(game, ship) {
     if (moves.length) {
       moves.sort(
         (a, b) =>
-          hexApproxDist({ col: a.col, row: a.row }, prey) -
-          hexApproxDist({ col: b.col, row: b.row }, prey)
+          hexDistance({ col: a.col, row: a.row }, prey) -
+          hexDistance({ col: b.col, row: b.row }, prey)
       );
       const best = moves[0];
-      const here = hexApproxDist(ship, prey);
-      const there = hexApproxDist(best, prey);
+      const here = hexDistance(ship, prey);
+      const there = hexDistance(best, prey);
       if (there < here || there === here) {
         const from = { col: ship.col, row: ship.row };
         const cost = best.dist * game.map.moveCost;
@@ -725,14 +715,36 @@ export function attachBoardController(canvas, getGame, onChange) {
         );
         const view = getBoardView(game);
 
-        const ft = view.fireTargets.find((t) => t.col === cell.col && t.row === cell.row);
-        if (ft) {
-          const selected = game.ships.find((s) => s.id === game.selectedId);
-          if (selected) {
-            const weapon =
-              shipDef(selected).weapons.find((w) => w.id === game.activeWeaponId) ||
-              shipDef(selected).weapons[0];
+        const selected = game.ships.find((s) => s.id === game.selectedId);
+        const actor = currentActor(game);
+        const controlling =
+          selected &&
+          actor &&
+          actor.id === selected.id &&
+          selected.faction === game.playerFaction;
+
+        // Fire: red hex or enemy ship while in fire mode
+        if (controlling && game.mode === 'fire' && !selected.fired) {
+          const weapon =
+            shipDef(selected).weapons.find((w) => w.id === game.activeWeaponId) ||
+            shipDef(selected).weapons[0];
+          const targets = fireTargetsFor(game, selected, weapon);
+          const ft =
+            targets.find((t) => t.col === cell.col && t.row === cell.row) ||
+            (shipHere &&
+              shipHere.faction !== game.playerFaction &&
+              targets.find((t) => t.shipId === shipHere.id));
+          if (ft) {
             fireAt(game, ft.shipId, weapon.id);
+            onChange();
+            return;
+          }
+          if (shipHere && shipHere.faction !== game.playerFaction) {
+            log(
+              game,
+              `${shipHere.name} is out of arc or range for ${weapon.name}.`,
+              'alert'
+            );
             onChange();
             return;
           }
@@ -744,7 +756,16 @@ export function attachBoardController(canvas, getGame, onChange) {
           return;
         }
 
+        // Don't steal selection to a hostile while you still control an actor
         if (shipHere) {
+          if (
+            controlling &&
+            shipHere.faction !== game.playerFaction &&
+            (game.mode === 'fire' || game.mode === 'move')
+          ) {
+            onChange();
+            return;
+          }
           selectShip(game, shipHere.id);
           game.activeWeaponId = shipDef(shipHere).weapons[0].id;
           onChange();

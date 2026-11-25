@@ -10,6 +10,8 @@ import {
   endActivation,
   turnShip,
   canTurnShip,
+  fireTargetsFor,
+  fireAt,
   FACTIONS,
   ARC_LABELS,
   getBoardView,
@@ -178,9 +180,12 @@ function refresh() {
     actor.id === selected.id &&
     selected.faction === game.playerFaction;
 
+  const playerActor =
+    actor && actor.faction === game.playerFaction ? actor : null;
   btnMove.disabled = !controllable || selected.moveLeft <= 0;
   btnFire.disabled = !controllable || selected.fired;
-  btnWait.disabled = !controllable;
+  // End always available for the player's current actor (even if inspecting another ship)
+  btnWait.disabled = !playerActor;
   const canTurn = controllable && canTurnShip(game, selected);
   btnTurnPort.disabled = !canTurn;
   btnTurnStarboard.disabled = !canTurn;
@@ -254,9 +259,25 @@ btnMove.addEventListener('click', () => {
 btnFire.addEventListener('click', () => {
   if (!game?.selectedId) return;
   const ship = game.ships.find((s) => s.id === game.selectedId);
-  if (!ship) return;
-  game.activeWeaponId = game.activeWeaponId || getShipDef(ship).weapons[0].id;
+  if (!ship || ship.fired) return;
+  const actor = currentActor(game);
+  if (!actor || actor.id !== ship.id || ship.faction !== game.playerFaction) return;
+  const weapon =
+    getShipDef(ship).weapons.find((w) => w.id === game.activeWeaponId) ||
+    getShipDef(ship).weapons[0];
+  game.activeWeaponId = weapon.id;
   game.mode = 'fire';
+  const targets = fireTargetsFor(game, ship, weapon);
+  if (!targets.length) {
+    game.log.unshift({
+      text: `No valid targets for ${weapon.name} — turn to face the enemy, close to range ${weapon.range}, or press End.`,
+      kind: 'alert',
+      t: Date.now(),
+    });
+  } else if (targets.length === 1) {
+    // One legal shot — fire it immediately so Fire isn't a no-op
+    fireAt(game, targets[0].shipId, weapon.id);
+  }
   refresh();
 });
 
