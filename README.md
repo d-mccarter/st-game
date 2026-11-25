@@ -27,4 +27,10 @@ Then open the printed local URL.
 
 ## GitHub Pages
 
-Pages is configured to deploy from branch **`main`**, folder **`/` (root)** — same as the guitar app.
+One-time enable (required once after the first push):
+
+1. Open https://github.com/d-mccarter/st-game/settings/pages
+2. Under **Build and deployment → Source**, choose **GitHub Actions**
+3. Save — the `Deploy to GitHub Pages` workflow will publish the site
+
+After that, every push to `main` updates https://d-mccarter.github.io/st-game/
