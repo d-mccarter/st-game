@@ -27,10 +27,12 @@ Then open the printed local URL.
 
 ## GitHub Pages
 
-One-time enable (required once after the first push):
+One-time enable (I can’t flip this setting from here — needs your GitHub admin click):
 
 1. Open https://github.com/d-mccarter/st-game/settings/pages
-2. Under **Build and deployment → Source**, choose **GitHub Actions**
-3. Save — the `Deploy to GitHub Pages` workflow will publish the site
+2. **Build and deployment → Source:** Deploy from a branch
+3. Branch: **`main`** / folder: **`/` (root)** → Save
 
-After that, every push to `main` updates https://d-mccarter.github.io/st-game/
+Site URL: https://d-mccarter.github.io/st-game/
+
+(There’s also a GitHub Actions deploy workflow in the repo if you prefer Source → GitHub Actions instead.)
