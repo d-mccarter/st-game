@@ -18,9 +18,9 @@ Simplified graphical **Starfleet Battles** you can open as a webpage (desktop or
 
 1. Configure the match (including board size) and spend points on ships → **Engage**  
 2. Tap your active ship — cyan hexes show legal moves  
-3. Tap a cyan hex to move  
-4. Tap a weapon in the side panel to show its firing arc; red hexes are valid targets  
-5. Tap an enemy / red hex to fire · press **End** to finish that ship’s activation  
+3. Tap a cyan hex to move **straight ahead** (facing unchanged)  
+4. Use **Port / Starboard** to turn 60° — costs 1 move and requires SFB **turn mode** (heavies TM 2, frigates TM 1)  
+5. Tap a weapon for its firing arc; red hexes are valid targets · **End** finishes the activation  
 
 ## Local
 
