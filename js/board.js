@@ -253,21 +253,44 @@ function drawHexIso(ctx, col, row, originX, originY, camera, fill, stroke) {
   }
 }
 
-/** Screen angles for facings E, NE, NW, W, SW, SE (canvas Y-down). */
-const FACING_RAD = [0, -Math.PI / 3, (-2 * Math.PI) / 3, Math.PI, (2 * Math.PI) / 3, Math.PI / 3];
 const FACING_LABEL = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
+
+/** Even-column neighbor deltas for facings 0=E … 5=SE (matches neighbors()). */
+const FACING_DELTA_EVEN = [
+  [+1, 0],
+  [+1, -1],
+  [0, -1],
+  [-1, -1],
+  [-1, 0],
+  [0, +1],
+];
+
+/**
+ * Screen-space bearing of a hex facing on the isometric board
+ * (points toward the neighboring hex in that facing).
+ */
+function facingScreenAngle(facing) {
+  const [dc, dr] = FACING_DELTA_EVEN[((facing % 6) + 6) % 6];
+  const from = flatCenter(2, 2);
+  const to = flatCenter(2 + dc, 2 + dr);
+  const a = isoProject(from.wx, from.wy);
+  const b = isoProject(to.wx, to.wy);
+  return Math.atan2(b.iy - a.iy, b.ix - a.ix);
+}
 
 /**
  * Draw 3/4 isometric mini sprites upright on their stands.
- * Only mirror for westward headings — full yaw tipped the flight stands.
+ * Art is authored with the bow toward screen-right; mirror when the
+ * hex facing points left on the iso board. Chevron uses true iso bearing.
  */
 function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
   const size = HEX * camera.zoom * (heavy ? 1.05 : 0.9);
   const facing = ((ship.facing % 6) + 6) % 6;
-  const heading = FACING_RAD[facing];
-  const mirror = facing === 2 || facing === 3 || facing === 4; // NW, W, SW
+  const heading = facingScreenAngle(facing);
+  // Mirror when the facing's screen vector points left (W / SW / SE)
+  const mirror = Math.cos(heading) < 0;
 
   ctx.save();
   ctx.beginPath();
@@ -298,17 +321,17 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
     ctx.fill();
   }
 
-  // Facing chevron on the base — matches Orders panel heading
+  // Facing chevron — same bearing as hex neighbors / firing arcs
   const s = Math.max(0.85, camera.zoom);
-  const bx = x + Math.cos(heading) * size * 0.4;
-  const by = y + Math.sin(heading) * size * 0.28;
+  const bx = x + Math.cos(heading) * size * 0.42;
+  const by = y + Math.sin(heading) * size * 0.42;
   ctx.save();
   ctx.translate(bx, by);
   ctx.rotate(heading);
   ctx.beginPath();
-  ctx.moveTo(7 * s, 0);
-  ctx.lineTo(-5 * s, 4.5 * s);
-  ctx.lineTo(-5 * s, -4.5 * s);
+  ctx.moveTo(8 * s, 0);
+  ctx.lineTo(-5.5 * s, 5 * s);
+  ctx.lineTo(-5.5 * s, -5 * s);
   ctx.closePath();
   ctx.fillStyle = selected ? '#ffe08a' : '#f2f7fb';
   ctx.strokeStyle = 'rgba(0,0,0,0.65)';
