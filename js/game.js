@@ -2,6 +2,7 @@ import {
   FACTIONS,
   SHIP_TYPES,
   MAPS,
+  buildMap,
   opposingFaction,
   ARC_LABELS,
 } from './data.js';
@@ -110,7 +111,7 @@ function mirrorFleet(playerFaction, counts) {
 }
 
 export function createGame(settings) {
-  const map = MAPS[settings.map];
+  const map = buildMap(settings.map, settings.boardSize || 'standard');
   const playerFaction = settings.faction;
   const enemy = mirrorFleet(playerFaction, settings.fleet);
 

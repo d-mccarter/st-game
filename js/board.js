@@ -31,7 +31,8 @@ export function fitTiles(canvas, cols, rows, _camera = { zoom: 1 }) {
   const isoH = (flatW + flatH) * ISO_Y;
   const maxByW = (w - pad * 2) / Math.max(1, isoW);
   const maxByH = (h - pad * 2) / Math.max(1, isoH);
-  HEX = Math.max(14, Math.min(64, Math.floor(Math.min(maxByW, maxByH))));
+  // Allow smaller hexes on large boards so the full grid still fits
+  HEX = Math.max(10, Math.min(64, Math.floor(Math.min(maxByW, maxByH))));
   return tileSize();
 }
 

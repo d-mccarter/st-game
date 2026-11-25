@@ -25,7 +25,7 @@ export const FACTIONS = {
 export const SHIP_TYPES = {
   ca: {
     id: 'ca',
-    name: 'Constitution Cruiser',
+    name: 'Constitution-class',
     faction: 'federation',
     cost: 75,
     hull: 10,
@@ -38,7 +38,7 @@ export const SHIP_TYPES = {
   },
   ff: {
     id: 'ff',
-    name: 'Miranda Frigate',
+    name: 'Miranda-class',
     faction: 'federation',
     cost: 45,
     hull: 6,
@@ -64,7 +64,7 @@ export const SHIP_TYPES = {
   },
   f5: {
     id: 'f5',
-    name: 'F5 Frigate',
+    name: 'Bird of Prey',
     faction: 'klingon',
     cost: 45,
     hull: 5,
@@ -77,34 +77,98 @@ export const SHIP_TYPES = {
   },
 };
 
-export const MAPS = {
+/** Selectable hex-grid sizes (cols × rows). */
+export const BOARD_SIZES = {
+  skirmish: { id: 'skirmish', name: 'Skirmish — 9×9', cols: 9, rows: 9 },
+  standard: { id: 'standard', name: 'Standard — 12×12', cols: 12, rows: 12 },
+  fleet: { id: 'fleet', name: 'Fleet — 15×15', cols: 15, rows: 15 },
+  sector: { id: 'sector', name: 'Sector — 18×14', cols: 18, rows: 14 },
+};
+
+const MAP_BASE = {
   void: {
     id: 'void',
     name: 'Open Void',
-    cols: 9,
-    rows: 9,
     moveCost: 1,
-    blocked: [],
+    blockedFrac: [],
   },
   asteroids: {
     id: 'asteroids',
     name: 'Asteroid Field',
-    cols: 9,
-    rows: 9,
     moveCost: 1,
-    blocked: [
-      [3, 2], [4, 2], [5, 3], [2, 5], [6, 5], [4, 6], [3, 7],
+    blockedFrac: [
+      [0.33, 0.22],
+      [0.44, 0.22],
+      [0.55, 0.33],
+      [0.22, 0.55],
+      [0.66, 0.55],
+      [0.44, 0.66],
+      [0.33, 0.77],
+      [0.5, 0.4],
+      [0.7, 0.3],
+      [0.28, 0.38],
+      [0.6, 0.72],
+      [0.75, 0.48],
+      [0.4, 0.5],
+      [0.52, 0.58],
     ],
   },
   nebula: {
     id: 'nebula',
     name: 'Nebula Drift',
-    cols: 9,
-    rows: 9,
     moveCost: 2,
-    blocked: [],
+    blockedFrac: [],
   },
 };
+
+/** @deprecated Prefer buildMap — kept for UI name lookups */
+export const MAPS = Object.fromEntries(
+  Object.entries(MAP_BASE).map(([id, m]) => [
+    id,
+    { ...m, cols: 12, rows: 12, blocked: [] },
+  ])
+);
+
+function uniqueCells(cells, cols, rows) {
+  const seen = new Set();
+  const out = [];
+  for (const [c, r] of cells) {
+    if (c < 1 || r < 1 || c >= cols - 1 || r >= rows - 1) continue;
+    const k = `${c},${r}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push([c, r]);
+  }
+  return out;
+}
+
+/** Build a concrete map for the chosen terrain + board size. */
+export function buildMap(mapId, sizeId = 'standard') {
+  const base = MAP_BASE[mapId] || MAP_BASE.void;
+  const size = BOARD_SIZES[sizeId] || BOARD_SIZES.standard;
+  const cols = size.cols;
+  const rows = size.rows;
+  const maxFrac = cols >= 15 ? 1 : cols >= 12 ? 0.75 : 0.5;
+  const fracs = (base.blockedFrac || []).slice(
+    0,
+    Math.max(0, Math.ceil((base.blockedFrac || []).length * maxFrac))
+  );
+  const blocked = uniqueCells(
+    fracs.map(([fx, fy]) => [Math.round(fx * (cols - 1)), Math.round(fy * (rows - 1))]),
+    cols,
+    rows
+  );
+  return {
+    id: base.id,
+    name: base.name,
+    cols,
+    rows,
+    moveCost: base.moveCost,
+    blocked,
+    sizeId: size.id,
+    sizeName: size.name,
+  };
+}
 
 export function shipsForFaction(factionId) {
   return Object.values(SHIP_TYPES).filter((s) => s.faction === factionId);

@@ -104,6 +104,7 @@ export function initSetup(root, onStart) {
       points: points(),
       faction: currentFaction(),
       map: form.map.value,
+      boardSize: form.boardSize.value,
       ruleAlternating: form.ruleAlternating.checked,
       ruleOverload: form.ruleOverload.checked,
       ruleRetreat: form.ruleRetreat.checked,

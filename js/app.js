@@ -197,7 +197,10 @@ function startGame(settings) {
     // Force AI by calling select then afterActivation through a player skip — instead re-order so player first
   }
 
-  mapName.textContent = MAPS[settings.map].name;
+  const sizeLabel = settings.boardSize
+    ? { skirmish: '9×9', standard: '12×12', fleet: '15×15', sector: '18×14' }[settings.boardSize]
+    : '12×12';
+  mapName.textContent = `${MAPS[settings.map].name} · ${sizeLabel}`;
   ruleTags.innerHTML = [
     settings.ruleAlternating ? 'Alternating' : 'Faction turns',
     settings.ruleOverload ? 'Overload' : null,

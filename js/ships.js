@@ -1,10 +1,10 @@
 /** Ship sprite loader — original stylized starship art (not official Trek IP). */
 
 const SRC = {
-  ca: 'assets/ships/ca.png?v=mini2',
-  ff: 'assets/ships/ff.png?v=mini2',
-  d7: 'assets/ships/d7.png?v=mini2',
-  f5: 'assets/ships/f5.png?v=mini2',
+  ca: 'assets/ships/ca.png?v=trek1',
+  ff: 'assets/ships/ff.png?v=trek1',
+  d7: 'assets/ships/d7.png?v=trek1',
+  f5: 'assets/ships/f5.png?v=trek1',
 };
 
 const cache = new Map();

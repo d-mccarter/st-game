@@ -7,16 +7,16 @@ Simplified graphical **Starfleet Battles** you can open as a webpage (desktop or
 
 ## What’s in v1
 
-1. **Setup** — starting points, faction, map type, custom rules, fleet builder  
-2. **Isometric board** — diamond-tile map (void / asteroids / nebula)  
-3. **Two factions × two ships** — Federation Constitution & Miranda; Klingon D7 & F5  
+1. **Setup** — starting points, faction, map type, board size (9×9 to 18×14), custom rules, fleet builder  
+2. **Isometric board** — hex map (void / asteroids / nebula)  
+3. **Two factions × two ships** — Federation Constitution-class & Miranda-class; Klingon D7 & Bird of Prey  
 4. **Tap / click movement** — legal move hexes highlight when your ship is selected; ships glide between hexes and weapons fire with beam/bolt FX  
 
 5. **Ship intel** — hull, shields, weapons; firing arcs drawn on the board  
 
 ## How to play
 
-1. Configure the match and spend points on ships → **Engage**  
+1. Configure the match (including board size) and spend points on ships → **Engage**  
 2. Tap your active ship — cyan hexes show legal moves  
 3. Tap a cyan hex to move  
 4. Tap a weapon in the side panel to show its firing arc; red hexes are valid targets  
