@@ -253,8 +253,7 @@ function drawHexIso(ctx, col, row, originX, originY, camera, fill, stroke) {
 
 /** Screen angles for facings E, NE, NW, W, SW, SE (canvas Y-down). */
 const FACING_RAD = [0, -Math.PI / 3, (-2 * Math.PI) / 3, Math.PI, (2 * Math.PI) / 3, Math.PI / 3];
-/** All ship PNGs are drawn with the bow toward bottom-left ≈ SW. */
-const ART_NOSE_RAD = FACING_RAD[4];
+const FACING_LABEL = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
 
 function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const img = shipImage(ship.typeId);
@@ -262,8 +261,10 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const size = HEX * camera.zoom * (heavy ? 1.05 : 0.9);
   const facing = ((ship.facing % 6) + 6) % 6;
   const heading = FACING_RAD[facing];
+  // Keep minis upright on their stands — only mirror for westward headings.
+  // (Full in-plane rotation tipped the flight stands on their side.)
+  const mirror = facing === 2 || facing === 3 || facing === 4; // NW, W, SW
 
-  // Fixed ground shadow under the stand (does not spin with the hull)
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(x, y + size * 0.22, size * 0.28, size * 0.12, 0, 0, Math.PI * 2);
@@ -274,8 +275,7 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   if (img) {
     ctx.save();
     ctx.translate(x, y - size * 0.04);
-    // Rotate so the painted bow matches the detail-panel facing
-    ctx.rotate(heading - ART_NOSE_RAD);
+    if (mirror) ctx.scale(-1, 1);
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
   } else {
@@ -294,23 +294,34 @@ function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
     ctx.fill();
   }
 
-  // Facing chevron — same heading as the detail window
-  const bx = x + Math.cos(heading) * size * 0.42;
-  const by = y + Math.sin(heading) * size * 0.42;
+  // Facing marker on the base — this is the authoritative heading cue
+  const s = Math.max(0.85, camera.zoom);
+  const bx = x + Math.cos(heading) * size * 0.4;
+  const by = y + Math.sin(heading) * size * 0.28;
   ctx.save();
   ctx.translate(bx, by);
   ctx.rotate(heading);
-  const s = Math.max(0.7, camera.zoom);
   ctx.beginPath();
-  ctx.moveTo(5 * s, 0);
-  ctx.lineTo(-3.5 * s, 3 * s);
-  ctx.lineTo(-3.5 * s, -3 * s);
+  ctx.moveTo(7 * s, 0);
+  ctx.lineTo(-5 * s, 4.5 * s);
+  ctx.lineTo(-5 * s, -4.5 * s);
   ctx.closePath();
-  ctx.fillStyle = selected ? '#ffe08a' : '#e8f2f7';
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-  ctx.lineWidth = 1;
+  ctx.fillStyle = selected ? '#ffe08a' : '#f2f7fb';
+  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+  ctx.lineWidth = 1.25;
   ctx.fill();
   ctx.stroke();
+  ctx.restore();
+
+  // Tiny facing label so it matches the Orders panel exactly
+  ctx.save();
+  ctx.font = `700 ${Math.max(10, 11 * camera.zoom)}px Rajdhani, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillText(FACING_LABEL[facing], x + 1, y + size * 0.48 + 1);
+  ctx.fillStyle = selected ? '#ffe08a' : '#e8f2f7';
+  ctx.fillText(FACING_LABEL[facing], x, y + size * 0.48);
   ctx.restore();
 }
 
