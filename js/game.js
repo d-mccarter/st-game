@@ -15,6 +15,7 @@ import {
   eventToLogic,
   screenToGrid,
   computeOrigin,
+  fitTiles,
 } from './board.js';
 
 let uid = 1;
@@ -491,6 +492,7 @@ export function attachBoardController(canvas, getGame, onChange) {
     if (!game || game.winner) return;
     if (evt.preventDefault) evt.preventDefault();
     resizeCanvas(canvas);
+    fitTiles(canvas, game.cols, game.rows);
     const { x, y } = eventToLogic(canvas, evt);
     const origin = computeOrigin(canvas, game.cols, game.rows);
     const cell = screenToGrid(x, y, origin.originX, origin.originY, game.cols, game.rows);

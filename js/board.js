@@ -1,13 +1,27 @@
 /**
- * Isometric diamond grid (offset axial-ish).
- * Cell (c,r) draws as a diamond; neighbors are orthogonal + diagonal for SFB-feel movement.
+ * Isometric diamond grid. Tile size scales to fill the canvas.
  */
 
-const TILE_W = 72;
-const TILE_H = 36;
+let TILE_W = 72;
+let TILE_H = 36;
 
 export function tileSize() {
   return { w: TILE_W, h: TILE_H };
+}
+
+export function fitTiles(canvas, cols, rows) {
+  const w = canvas._logicW || canvas.width;
+  const h = canvas._logicH || canvas.height;
+  // Grid extents in tile units (diamond projection)
+  const unitsX = cols + rows;
+  const unitsY = cols + rows;
+  const pad = 24;
+  const maxW = Math.max(40, (w - pad * 2) / (unitsX / 2));
+  const maxH = Math.max(20, (h - pad * 2) / (unitsY / 2));
+  // Keep 2:1 diamond aspect
+  TILE_W = Math.min(88, Math.floor(Math.min(maxW, maxH * 2)));
+  TILE_H = Math.floor(TILE_W / 2);
+  return tileSize();
 }
 
 export function gridToScreen(col, row, originX, originY) {
@@ -43,11 +57,9 @@ export function key(col, row) {
   return `${col},${row}`;
 }
 
-/** Hex-style facing 0..5 toward a neighbor cell */
 export function facingToward(from, to) {
   const dc = to.col - from.col;
   const dr = to.row - from.row;
-  // Map 6-dir deltas to facing
   const table = {
     '1,0': 1,
     '1,-1': 0,
@@ -63,12 +75,8 @@ export function facingDelta(fromFacing, toFacing) {
   return ((toFacing - fromFacing) % 6 + 6) % 6;
 }
 
-/** Relative arc of target cell from ship facing */
 export function relativeArc(ship, targetCell) {
-  const abs = facingToward(
-    { col: ship.col, row: ship.row },
-    targetCell
-  );
+  const abs = facingToward({ col: ship.col, row: ship.row }, targetCell);
   return facingDelta(ship.facing, abs);
 }
 
@@ -77,7 +85,7 @@ export function computeOrigin(canvas, cols, rows) {
   const h = canvas._logicH || canvas.height;
   const gridH = (cols + rows) * (TILE_H / 2);
   const originX = w / 2;
-  const originY = Math.max(48, (h - gridH) / 2 + TILE_H);
+  const originY = (h - gridH) / 2 + TILE_H / 2;
   return { originX, originY, gridW: (cols + rows) * (TILE_W / 2), gridH };
 }
 
@@ -100,11 +108,11 @@ function drawDiamond(ctx, x, y, fill, stroke) {
 }
 
 function shipPath(ctx, x, y, facing, scale = 1) {
-  // Triangle pointing by facing around isometric-ish directions
   const angles = [-90, -30, 30, 90, 150, -150].map((d) => (d * Math.PI) / 180);
   const a = angles[facing % 6];
-  const len = 16 * scale;
-  const wing = 10 * scale;
+  const s = (TILE_W / 72) * scale;
+  const len = 16 * s;
+  const wing = 10 * s;
   const tipX = x + Math.cos(a) * len;
   const tipY = y + Math.sin(a) * len;
   const leftX = x + Math.cos(a + 2.4) * wing;
@@ -118,15 +126,12 @@ function shipPath(ctx, x, y, facing, scale = 1) {
   ctx.closePath();
 }
 
-/** Draw wedge arcs on board for selected ship's active weapon arcs */
 export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, blockedSet) {
   if (!ship || !weapon) return;
   const arcs = new Set(weapon.arcs);
   const range = weapon.range;
-
-  // BFS limited by range for cells in allowed relative arcs
   const seen = new Set([key(ship.col, ship.row)]);
-  let frontier = [{ col: ship.col, row: ship.row, dist: 0 }];
+  const frontier = [{ col: ship.col, row: ship.row, dist: 0 }];
 
   while (frontier.length) {
     const cur = frontier.shift();
@@ -158,17 +163,15 @@ export function drawBoard(ctx, state) {
   } = state;
 
   const canvas = ctx.canvas;
+  fitTiles(canvas, cols, rows);
   const { originX, originY } = computeOrigin(canvas, cols, rows);
   const lw = canvas._logicW || canvas.width;
   const lh = canvas._logicH || canvas.height;
   ctx.clearRect(0, 0, lw, lh);
 
-  // Stars
   ctx.fillStyle = 'rgba(255,255,255,0.35)';
   for (let i = 0; i < 60; i++) {
-    const sx = (i * 97) % lw;
-    const sy = (i * 53) % lh;
-    ctx.fillRect(sx, sy, 1, 1);
+    ctx.fillRect((i * 97) % lw, (i * 53) % lh, 1, 1);
   }
 
   const moveSet = new Set(legalMoves.map((m) => key(m.col, m.row)));
@@ -198,8 +201,8 @@ export function drawBoard(ctx, state) {
     drawFiringArcs(ctx, selected, showArcsWeapon, originX, originY, cols, rows, blockedSet);
   }
 
-  // Ships sorted back-to-front
-  const ordered = [...ships].filter((s) => s.alive).sort((a, b) => (a.col + a.row) - (b.col + b.row));
+  const ordered = [...ships].filter((s) => s.alive).sort((a, b) => a.col + a.row - (b.col + b.row));
+  const pip = Math.max(10, TILE_W * 0.35);
   for (const ship of ordered) {
     const { x, y } = gridToScreen(ship.col, ship.row, originX, originY);
     const fac = factions[ship.faction];
@@ -217,14 +220,12 @@ export function drawBoard(ctx, state) {
     ctx.fill();
     ctx.stroke();
 
-    // Hull pip
     const ratio = ship.hull / ship.hullMax;
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x - 14, y + 12, 28, 4);
+    ctx.fillRect(x - pip / 2, y + TILE_H * 0.35, pip, 4);
     ctx.fillStyle = ratio > 0.4 ? '#5dce9a' : '#e2b84a';
     if (ratio <= 0.25) ctx.fillStyle = '#e35d5d';
-    ctx.fillRect(x - 14, y + 12, 28 * ratio, 4);
-
+    ctx.fillRect(x - pip / 2, y + TILE_H * 0.35, pip * ratio, 4);
     ctx.restore();
   }
 
@@ -233,8 +234,8 @@ export function drawBoard(ctx, state) {
 
 export function resizeCanvas(canvas) {
   const parent = canvas.parentElement;
-  const w = Math.max(320, parent.clientWidth);
-  const h = Math.max(360, parent.clientHeight || Math.floor(window.innerHeight * 0.55));
+  const w = Math.max(280, parent.clientWidth);
+  const h = Math.max(280, parent.clientHeight || Math.floor(window.innerHeight * 0.55));
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
@@ -242,7 +243,6 @@ export function resizeCanvas(canvas) {
   canvas.style.height = `${h}px`;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  // Logical size for hit-testing
   canvas._logicW = w;
   canvas._logicH = h;
   return ctx;
