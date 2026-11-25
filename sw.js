@@ -1,4 +1,4 @@
-const CACHE = 'starfleet-tactics-v10';
+const CACHE = 'starfleet-tactics-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   './js/board.js',
   './js/data.js',
   './js/ships.js',
+  './js/fx.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

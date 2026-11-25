@@ -3,6 +3,7 @@
  */
 
 import { shipImage } from './ships.js';
+import { shipDrawCell, lerpScreen } from './fx.js';
 
 /** Base hex radius in world units (before iso + zoom) */
 let HEX = 40;
@@ -359,6 +360,146 @@ export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, 
   }
 }
 
+function shipScreenPos(ship, fx, originX, originY, camera) {
+  const m = fx?.moves?.[ship.id];
+  if (!m) return gridToScreen(ship.col, ship.row, originX, originY, camera);
+  const cell = shipDrawCell(ship, fx);
+  const from = flatCenter(m.fromCol, m.fromRow);
+  const to = flatCenter(m.toCol, m.toRow);
+  const t = cell.t;
+  const wx = from.wx + (to.wx - from.wx) * t;
+  const wy = from.wy + (to.wy - from.wy) * t;
+  const { ix, iy } = isoProject(wx, wy);
+  return {
+    x: originX + (ix + camera.panX) * camera.zoom,
+    y: originY + (iy + camera.panY) * camera.zoom,
+  };
+}
+
+function drawBeams(ctx, fx, ships, originX, originY, camera) {
+  if (!fx?.beams?.length) return;
+  const now = performance.now();
+  for (const b of fx.beams) {
+    const fromShip = ships.find((s) => s.id === b.fromId);
+    const toShip = ships.find((s) => s.id === b.toId);
+    const from = fromShip
+      ? shipScreenPos(fromShip, fx, originX, originY, camera)
+      : gridToScreen(b.fromCol, b.fromRow, originX, originY, camera);
+    const to = toShip
+      ? shipScreenPos(toShip, fx, originX, originY, camera)
+      : gridToScreen(b.toCol, b.toRow, originX, originY, camera);
+    const raw = Math.min(1, Math.max(0, (now - b.start) / b.duration));
+    const style = b.style;
+    const head = lerpScreen(from, to, Math.min(1, raw * 1.05));
+    const tailT = style.kind === 'bolt' ? Math.max(0, raw - 0.18) : 0;
+    const tail = lerpScreen(from, to, tailT);
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.shadowColor = style.glow;
+    ctx.shadowBlur = 12 * camera.zoom;
+
+    if (style.kind === 'beam') {
+      const alpha = raw < 0.85 ? 0.95 : Math.max(0, 1 - (raw - 0.85) / 0.2);
+      ctx.strokeStyle = style.glow;
+      ctx.globalAlpha = alpha * 0.45;
+      ctx.lineWidth = style.width * 3 * camera.zoom;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(head.x, head.y);
+      ctx.stroke();
+      ctx.strokeStyle = style.color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = style.width * camera.zoom;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(head.x, head.y);
+      ctx.stroke();
+    } else {
+      // Torpedo / drone bolt
+      ctx.strokeStyle = style.glow;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = style.width * 2.2 * camera.zoom;
+      ctx.beginPath();
+      ctx.moveTo(tail.x, tail.y);
+      ctx.lineTo(head.x, head.y);
+      ctx.stroke();
+      ctx.fillStyle = style.color;
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, 3.5 * camera.zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawBursts(ctx, fx, originX, originY, camera) {
+  if (!fx?.bursts?.length) return;
+  const now = performance.now();
+  for (const b of fx.bursts) {
+    const { x, y } = gridToScreen(b.col, b.row, originX, originY, camera);
+    const t = Math.min(1, (now - b.start) / b.duration);
+    const r = HEX * camera.zoom * (b.destroyed ? 0.2 + t * 0.85 : 0.12 + t * 0.45);
+    const alpha = 1 - t;
+    ctx.save();
+    if (b.destroyed) {
+      ctx.fillStyle = `rgba(255, 160, 70, ${alpha * 0.55})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 230, 180, ${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      for (let i = 0; i < 8; i++) {
+        const ang = (Math.PI * 2 * i) / 8 + t;
+        ctx.strokeStyle = `rgba(255, 200, 120, ${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(ang) * r * 1.2, y + Math.sin(ang) * r * 0.7);
+        ctx.stroke();
+      }
+    } else if (b.shieldOnly) {
+      ctx.strokeStyle = `rgba(120, 200, 255, ${alpha})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * 1.1, r * 0.55, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = `rgba(255, 90, 60, ${alpha * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255, 200, 140, ${alpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function drawFloats(ctx, fx, originX, originY, camera) {
+  if (!fx?.floats?.length) return;
+  const now = performance.now();
+  for (const f of fx.floats) {
+    const { x, y } = gridToScreen(f.col, f.row, originX, originY, camera);
+    const t = Math.min(1, (now - f.start) / f.duration);
+    const rise = t * 28 * camera.zoom;
+    const alpha = t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.font = `600 ${Math.max(11, 12 * camera.zoom)}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle =
+      f.kind === 'kill' ? '#ffb070' : f.kind === 'shield' ? '#9fd6ff' : '#ffe0c0';
+    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(f.text, x, y - rise - HEX * camera.zoom * 0.35);
+    ctx.fillText(f.text, x, y - rise - HEX * camera.zoom * 0.35);
+    ctx.restore();
+  }
+}
+
 export function drawBoard(ctx, state) {
   const {
     cols,
@@ -371,6 +512,7 @@ export function drawBoard(ctx, state) {
     showArcsWeapon,
     factions,
     camera = { zoom: 1, panX: 0, panY: 0 },
+    fx = null,
   } = state;
 
   const canvas = ctx.canvas;
@@ -433,13 +575,13 @@ export function drawBoard(ctx, state) {
   const ordered = [...ships]
     .filter((s) => s.alive)
     .sort((a, b) => {
-      const sa = flatCenter(a.col, a.row);
-      const sb = flatCenter(b.col, b.row);
-      return sa.wx + sa.wy - (sb.wx + sb.wy);
+      const pa = shipScreenPos(a, fx, originX, originY, camera);
+      const pb = shipScreenPos(b, fx, originX, originY, camera);
+      return pa.x + pa.y - (pb.x + pb.y);
     });
 
   for (const ship of ordered) {
-    const { x, y } = gridToScreen(ship.col, ship.row, originX, originY, camera);
+    const { x, y } = shipScreenPos(ship, fx, originX, originY, camera);
     const fac = factions[ship.faction];
     const selectedShip = ship.id === selectedId;
     const pip = Math.max(8, HEX * camera.zoom * 0.4);
@@ -464,6 +606,10 @@ export function drawBoard(ctx, state) {
     if (ratio <= 0.25) ctx.fillStyle = '#e35d5d';
     ctx.fillRect(x - pip / 2, y + HEX * camera.zoom * 0.4, pip * ratio, 3);
   }
+
+  drawBeams(ctx, fx, ships, originX, originY, camera);
+  drawBursts(ctx, fx, originX, originY, camera);
+  drawFloats(ctx, fx, originX, originY, camera);
 
   return { originX, originY };
 }

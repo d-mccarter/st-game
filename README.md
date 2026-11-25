@@ -10,7 +10,8 @@ Simplified graphical **Starfleet Battles** you can open as a webpage (desktop or
 1. **Setup** — starting points, faction, map type, custom rules, fleet builder  
 2. **Isometric board** — diamond-tile map (void / asteroids / nebula)  
 3. **Two factions × two ships** — Federation Constitution & Miranda; Klingon D7 & F5  
-4. **Tap / click movement** — legal move hexes highlight when your ship is selected  
+4. **Tap / click movement** — legal move hexes highlight when your ship is selected; ships glide between hexes and weapons fire with beam/bolt FX  
+
 5. **Ship intel** — hull, shields, weapons; firing arcs drawn on the board  
 
 ## How to play

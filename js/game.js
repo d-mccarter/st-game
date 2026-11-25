@@ -19,6 +19,15 @@ import {
   createCamera,
   zoomAt,
 } from './board.js';
+import {
+  createFx,
+  fxBusy,
+  enqueueFx,
+  startMoveTween,
+  startFireTween,
+  tickFx,
+  waitMs,
+} from './fx.js';
 
 let uid = 1;
 const nextId = () => `ship-${uid++}`;
@@ -130,6 +139,7 @@ export function createGame(settings) {
     log: [],
     winner: null,
     camera: createCamera(),
+    fx: createFx(),
   };
 }
 
@@ -261,6 +271,7 @@ export function selectShip(game, shipId) {
 }
 
 export function moveShip(game, col, row) {
+  if (fxBusy(game.fx)) return false;
   const ship = game.ships.find((s) => s.id === game.selectedId);
   if (!ship) return false;
   const actor = currentActor(game);
@@ -269,18 +280,18 @@ export function moveShip(game, col, row) {
   const hit = legal.find((m) => m.col === col && m.row === row);
   if (!hit) return false;
   const cost = hit.dist * game.map.moveCost;
-  ship.facing = facingToward(
-    { col: ship.col, row: ship.row },
-    { col, row }
-  );
+  const from = { col: ship.col, row: ship.row };
+  ship.facing = facingToward(from, { col, row });
   ship.col = col;
   ship.row = row;
   ship.moveLeft = Math.max(0, ship.moveLeft - cost);
   log(game, `${ship.name} moved to ${col},${row}.`, '');
-  if (game.settings.ruleRetreat && isEdge(game, ship) && ship.faction === game.playerFaction) {
-    // optional disengage cue — not auto
-  }
   game.mode = ship.fired ? 'select' : 'fire';
+  enqueueFx(game.fx, async () => {
+    await startMoveTween(game.fx, ship, from);
+    game._fxPulse?.();
+  });
+  game._fxPulse?.();
   return true;
 }
 
@@ -293,7 +304,38 @@ function isEdge(game, ship) {
   );
 }
 
+function planShot(ship, target, weapon, overloadBonus = 0) {
+  let dmg = weapon.damage + overloadBonus;
+  const absorbed = Math.min(target.shields, dmg);
+  const hullDmg = Math.max(0, dmg - absorbed);
+  const destroyed = target.hull - hullDmg <= 0;
+  const shieldOnly = hullDmg === 0;
+  let label;
+  let kind;
+  if (destroyed) {
+    label = 'Destroyed!';
+    kind = 'kill';
+  } else if (shieldOnly) {
+    label = `−${absorbed} shield`;
+    kind = 'shield';
+  } else if (absorbed > 0) {
+    label = `−${absorbed} sh / −${hullDmg} hu`;
+    kind = 'hit';
+  } else {
+    label = `−${hullDmg} hull`;
+    kind = 'hit';
+  }
+  return { absorbed, hullDmg, destroyed, shieldOnly, label, kind };
+}
+
+function applyShot(target, plan) {
+  target.shields = Math.max(0, target.shields - plan.absorbed);
+  target.hull = Math.max(0, target.hull - plan.hullDmg);
+  // Keep the token on the board until the burst finishes (caller clears alive)
+}
+
 export function fireAt(game, targetShipId, weaponId) {
+  if (fxBusy(game.fx)) return false;
   const ship = game.ships.find((s) => s.id === game.selectedId);
   const target = game.ships.find((s) => s.id === targetShipId && s.alive);
   if (!ship || !target || ship.fired) return false;
@@ -305,37 +347,56 @@ export function fireAt(game, targetShipId, weaponId) {
   if (!targets.some((t) => t.shipId === target.id)) return false;
 
   if (game.settings.ruleOverload) ship.overload = true;
-  let dmg = weapon.damage + (ship.overload ? 1 : 0);
-  let absorbed = Math.min(target.shields, dmg);
-  target.shields -= absorbed;
-  dmg -= absorbed;
-  if (dmg > 0) {
-    target.hull -= dmg;
-    log(
-      game,
-      `${ship.name} hits ${target.name} with ${weapon.name} for ${absorbed} shield / ${dmg} hull.`,
-      'alert'
-    );
-  } else {
-    log(game, `${ship.name}'s ${weapon.name} splash against ${target.name}'s shields.`, '');
-  }
-  if (target.hull <= 0) {
-    target.alive = false;
-    target.hull = 0;
-    log(game, `${target.name} destroyed!`, 'bad');
-  }
+  const plan = planShot(ship, target, weapon, ship.overload ? 1 : 0);
   ship.fired = true;
   game.mode = 'select';
-  checkVictory(game);
-  if (!game.winner && ship.moveLeft <= 0) {
-    ship.activated = true;
-    game.selectedId = null;
-    afterActivation(game);
-  }
+
+  enqueueFx(game.fx, async () => {
+    await startFireTween(game.fx, ship, target, weapon, plan);
+    applyShot(target, plan);
+    if (plan.hullDmg > 0) {
+      log(
+        game,
+        `${ship.name} hits ${target.name} with ${weapon.name} for ${plan.absorbed} shield / ${plan.hullDmg} hull.`,
+        'alert'
+      );
+    } else {
+      log(game, `${ship.name}'s ${weapon.name} splash against ${target.name}'s shields.`, '');
+    }
+    if (plan.destroyed) log(game, `${target.name} destroyed!`, 'bad');
+    await waitMs(plan.destroyed ? 480 : 180);
+    if (plan.destroyed) target.alive = false;
+    checkVictory(game);
+    if (!game.winner && ship.moveLeft <= 0) {
+      ship.activated = true;
+      game.selectedId = null;
+      afterActivation(game);
+    } else if (!game.winner) {
+      // Still this ship's activation — keep it selected for movement
+      selectShip(game, ship.id);
+      game.activeWeaponId = shipDef(ship).weapons[0].id;
+      game.mode = ship.moveLeft > 0 ? 'move' : 'select';
+    }
+    // If afterActivation handed the turn to the player’s next ship, select it
+    const actor = currentActor(game);
+    if (
+      !game.winner &&
+      actor &&
+      actor.faction === game.playerFaction &&
+      (!game.selectedId || game.ships.find((s) => s.id === game.selectedId)?.activated)
+    ) {
+      selectShip(game, actor.id);
+      game.activeWeaponId = shipDef(actor).weapons[0].id;
+      game.mode = 'move';
+    }
+    game._fxPulse?.();
+  });
+  game._fxPulse?.();
   return true;
 }
 
 export function holdOrders(game) {
+  if (fxBusy(game.fx)) return false;
   const ship = game.ships.find((s) => s.id === game.selectedId);
   const actor = currentActor(game);
   if (!ship || !actor || actor.id !== ship.id) return false;
@@ -351,6 +412,7 @@ export function holdOrders(game) {
 }
 
 export function endActivation(game) {
+  if (fxBusy(game.fx)) return;
   const ship = game.ships.find((s) => s.id === game.selectedId) || currentActor(game);
   if (!ship) return;
   if (ship.faction !== game.playerFaction) return;
@@ -376,72 +438,85 @@ function afterActivation(game) {
   }
 }
 
-function runAiActivation(game, ship) {
-  // Simple AI: move closer to nearest enemy, then fire best weapon
-  const enemies = living(game, game.playerFaction);
-  if (!enemies.length) {
-    ship.activated = true;
-    afterActivation(game);
-    return;
-  }
-  enemies.sort(
-    (a, b) => hexApproxDist(ship, a) - hexApproxDist(ship, b)
-  );
-  const prey = enemies[0];
-  const moves = legalMovesFor(game, ship);
-  if (moves.length) {
-    moves.sort(
-      (a, b) =>
-        hexApproxDist({ col: a.col, row: a.row }, prey) -
-        hexApproxDist({ col: b.col, row: b.row }, prey)
-    );
-    const best = moves[0];
-    ship.facing = facingToward(ship, best);
-    const cost = best.dist * game.map.moveCost;
-    ship.col = best.col;
-    ship.row = best.row;
-    ship.moveLeft = Math.max(0, ship.moveLeft - cost);
-    log(game, `${ship.name} closes to ${best.col},${best.row}.`, '');
-  }
-  const def = shipDef(ship);
-  const weapon = [...def.weapons].sort((a, b) => b.damage - a.damage)[0];
-  const targets = fireTargetsFor(game, ship, weapon);
-  if (targets.length) {
-    const t = game.ships.find((s) => s.id === targets[0].shipId);
-    game.selectedId = ship.id;
-    // temporarily allow fire path
-    let dmg = weapon.damage;
-    let absorbed = Math.min(t.shields, dmg);
-    t.shields -= absorbed;
-    dmg -= absorbed;
-    if (dmg > 0) t.hull -= dmg;
-    log(
-      game,
-      `${ship.name} fires ${weapon.name} at ${t.name} (${absorbed} sh / ${Math.max(0, dmg)} hu).`,
-      'alert'
-    );
-    if (t.hull <= 0) {
-      t.alive = false;
-      t.hull = 0;
-      log(game, `${t.name} destroyed!`, 'bad');
-    }
-    ship.fired = true;
-  }
+function finishAiShip(game, ship) {
   ship.activated = true;
   ship.moveLeft = 0;
+  ship.fired = true;
   game.selectedId = null;
   checkVictory(game);
-  if (!game.winner) {
-    const next = currentActor(game);
-    if (!next) {
-      game.round += 1;
-      beginRound(game);
-      const n2 = currentActor(game);
-      if (n2 && n2.faction !== game.playerFaction) runAiActivation(game, n2);
-    } else if (next.faction !== game.playerFaction) {
-      runAiActivation(game, next);
-    }
+  if (game.winner) {
+    game._fxPulse?.();
+    return;
   }
+  const next = currentActor(game);
+  if (!next) {
+    game.round += 1;
+    beginRound(game);
+    const n2 = currentActor(game);
+    if (n2 && n2.faction !== game.playerFaction) runAiActivation(game, n2);
+    else game._fxPulse?.();
+  } else if (next.faction !== game.playerFaction) {
+    runAiActivation(game, next);
+  } else {
+    game._fxPulse?.();
+  }
+}
+
+function runAiActivation(game, ship) {
+  // Animate AI move + fire on the FX queue so player input stays locked
+  enqueueFx(game.fx, async () => {
+    const enemies = living(game, game.playerFaction);
+    if (!enemies.length) {
+      finishAiShip(game, ship);
+      return;
+    }
+    enemies.sort((a, b) => hexApproxDist(ship, a) - hexApproxDist(ship, b));
+    const prey = enemies[0];
+    game.selectedId = ship.id;
+
+    const moves = legalMovesFor(game, ship);
+    if (moves.length) {
+      moves.sort(
+        (a, b) =>
+          hexApproxDist({ col: a.col, row: a.row }, prey) -
+          hexApproxDist({ col: b.col, row: b.row }, prey)
+      );
+      const best = moves[0];
+      const from = { col: ship.col, row: ship.row };
+      ship.facing = facingToward(ship, best);
+      const cost = best.dist * game.map.moveCost;
+      ship.col = best.col;
+      ship.row = best.row;
+      ship.moveLeft = Math.max(0, ship.moveLeft - cost);
+      log(game, `${ship.name} closes to ${best.col},${best.row}.`, '');
+      game._fxPulse?.();
+      await startMoveTween(game.fx, ship, from);
+    }
+
+    const def = shipDef(ship);
+    const weapon = [...def.weapons].sort((a, b) => b.damage - a.damage)[0];
+    const targets = fireTargetsFor(game, ship, weapon);
+    if (targets.length) {
+      const t = game.ships.find((s) => s.id === targets[0].shipId && s.alive);
+      if (t) {
+        const plan = planShot(ship, t, weapon, 0);
+        game._fxPulse?.();
+        await startFireTween(game.fx, ship, t, weapon, plan);
+        applyShot(t, plan);
+        log(
+          game,
+          `${ship.name} fires ${weapon.name} at ${t.name} (${plan.absorbed} sh / ${plan.hullDmg} hu).`,
+          'alert'
+        );
+        if (plan.destroyed) log(game, `${t.name} destroyed!`, 'bad');
+        await waitMs(plan.destroyed ? 480 : 160);
+        if (plan.destroyed) t.alive = false;
+      }
+    }
+
+    finishAiShip(game, ship);
+  });
+  game._fxPulse?.();
 }
 
 function checkVictory(game) {
@@ -489,11 +564,12 @@ export function getBoardView(game) {
     blockedSet: game.blockedSet,
     ships: game.ships,
     selectedId: game.selectedId,
-    legalMoves,
-    fireTargets,
-    showArcsWeapon,
+    legalMoves: fxBusy(game.fx) ? [] : legalMoves,
+    fireTargets: fxBusy(game.fx) ? [] : fireTargets,
+    showArcsWeapon: fxBusy(game.fx) ? null : showArcsWeapon,
     factions: FACTIONS,
     camera: game.camera,
+    fx: game.fx,
   };
 }
 
@@ -503,6 +579,7 @@ export function attachBoardController(canvas, getGame, onChange) {
   let pinchStartZoom = 1;
   let panning = false;
   let panLast = null;
+  let animRaf = 0;
 
   const measure = (game) => {
     const parent = canvas.parentElement.getBoundingClientRect();
@@ -512,16 +589,41 @@ export function attachBoardController(canvas, getGame, onChange) {
     return computeOrigin(canvas, game.cols, game.rows);
   };
 
+  const ensureFxLoop = () => {
+    if (!animRaf) animRaf = requestAnimationFrame(pumpFx);
+  };
+
   const paint = () => {
     const game = getGame();
     if (!game) return;
+    game._fxPulse = () => {
+      ensureFxLoop();
+      onChange();
+    };
     const ctx = resizeCanvas(canvas);
     drawBoard(ctx, getBoardView(game));
+  };
+
+  const pumpFx = () => {
+    animRaf = 0;
+    const game = getGame();
+    if (!game?.fx) return;
+    const alive = tickFx(game.fx);
+    paint();
+    if (alive) {
+      animRaf = requestAnimationFrame(pumpFx);
+    } else {
+      onChange();
+    }
   };
 
   const onPointer = (evt) => {
     const game = getGame();
     if (!game || game.winner) {
+      paint();
+      return;
+    }
+    if (fxBusy(game.fx)) {
       paint();
       return;
     }
@@ -559,12 +661,6 @@ export function attachBoardController(canvas, getGame, onChange) {
               shipDef(selected).weapons.find((w) => w.id === game.activeWeaponId) ||
               shipDef(selected).weapons[0];
             fireAt(game, ft.shipId, weapon.id);
-            const actor = currentActor(game);
-            if (actor && actor.faction === game.playerFaction) {
-              selectShip(game, actor.id);
-              game.activeWeaponId = shipDef(actor).weapons[0].id;
-              game.mode = 'move';
-            }
             onChange();
             return;
           }
@@ -585,6 +681,7 @@ export function attachBoardController(canvas, getGame, onChange) {
       }
     } finally {
       paint();
+      ensureFxLoop();
     }
   };
 
