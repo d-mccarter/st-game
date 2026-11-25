@@ -108,35 +108,66 @@ function drawDiamond(ctx, x, y, fill, stroke) {
   }
 }
 
-/** Sprite art faces "up" (north). Facing 0..5 maps to board directions. */
+/** Board facing → screen angle for the base chevron (iso camera stays fixed). */
 const FACING_RAD = [-Math.PI / 2, -Math.PI / 6, Math.PI / 6, Math.PI / 2, (5 * Math.PI) / 6, (-5 * Math.PI) / 6];
 
-function drawShipSprite(ctx, ship, x, y, selected) {
+function drawShipSprite(ctx, ship, x, y, selected, factionColor) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
-  const size = TILE_W * (heavy ? 1.15 : 0.95);
+  // Miniatures sit large on the hex, like physical stands
+  const size = TILE_W * (heavy ? 1.55 : 1.35);
+  const facing = ship.facing % 6;
+  // Mirror when facing "port/west" so the nose reads correctly without tipping the iso mini
+  const mirror = facing === 3 || facing === 4 || facing === 5;
+
+  // Ground contact shadow
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(x, y + TILE_H * 0.22, TILE_W * 0.32, TILE_H * 0.22, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fill();
+  ctx.restore();
 
   if (img) {
     ctx.save();
-    ctx.translate(x, y - TILE_H * 0.08);
-    ctx.rotate(FACING_RAD[ship.facing % 6] - FACING_RAD[0]); // art faces up = facing 0
+    ctx.translate(x, y - size * 0.12);
     if (selected) {
-      ctx.shadowColor = 'rgba(255, 220, 120, 0.85)';
-      ctx.shadowBlur = 14;
+      ctx.shadowColor = 'rgba(255, 220, 120, 0.9)';
+      ctx.shadowBlur = 18;
     }
+    if (mirror) ctx.scale(-1, 1);
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
-    return;
+  } else {
+    const a = FACING_RAD[facing];
+    const s = size / 72;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * 16 * s, y + Math.sin(a) * 16 * s);
+    ctx.lineTo(x + Math.cos(a + 2.4) * 10 * s, y + Math.sin(a + 2.4) * 10 * s);
+    ctx.lineTo(x + Math.cos(a - 2.4) * 10 * s, y + Math.sin(a - 2.4) * 10 * s);
+    ctx.closePath();
+    ctx.fillStyle = factionColor;
+    ctx.fill();
   }
 
-  // Fallback triangle if sprite missing
-  const a = FACING_RAD[ship.facing % 6];
-  const s = size / 72;
+  // Facing chevron on the stand edge (reads like a painted base arrow)
+  const a = FACING_RAD[facing];
+  const bx = x + Math.cos(a) * TILE_W * 0.28;
+  const by = y + Math.sin(a) * TILE_H * 0.28 + TILE_H * 0.12;
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.rotate(a);
   ctx.beginPath();
-  ctx.moveTo(x + Math.cos(a) * 16 * s, y + Math.sin(a) * 16 * s);
-  ctx.lineTo(x + Math.cos(a + 2.4) * 10 * s, y + Math.sin(a + 2.4) * 10 * s);
-  ctx.lineTo(x + Math.cos(a - 2.4) * 10 * s, y + Math.sin(a - 2.4) * 10 * s);
+  ctx.moveTo(6, 0);
+  ctx.lineTo(-4, 3.5);
+  ctx.lineTo(-4, -3.5);
   ctx.closePath();
+  ctx.fillStyle = selected ? '#ffe08a' : '#e8f2f7';
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, blockedSet) {
@@ -225,22 +256,14 @@ export function drawBoard(ctx, state) {
       drawDiamond(ctx, x, y, 'rgba(255, 220, 120, 0.2)', 'rgba(255, 220, 120, 0.85)');
     }
 
-    // Soft faction glow under the sprite
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(x, y + 2, TILE_W * 0.28, TILE_H * 0.28, 0, 0, Math.PI * 2);
-    ctx.fillStyle = fac.color + '55';
-    ctx.fill();
-    ctx.restore();
-
-    drawShipSprite(ctx, ship, x, y, selectedShip);
+    drawShipSprite(ctx, ship, x, y, selectedShip, fac.color);
 
     const ratio = ship.hull / ship.hullMax;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(x - pip / 2, y + TILE_H * 0.42, pip, 4);
+    ctx.fillRect(x - pip / 2, y + TILE_H * 0.55, pip, 4);
     ctx.fillStyle = ratio > 0.4 ? '#5dce9a' : '#e2b84a';
     if (ratio <= 0.25) ctx.fillStyle = '#e35d5d';
-    ctx.fillRect(x - pip / 2, y + TILE_H * 0.42, pip * ratio, 4);
+    ctx.fillRect(x - pip / 2, y + TILE_H * 0.55, pip * ratio, 4);
   }
 
   return { originX, originY };
@@ -248,13 +271,15 @@ export function drawBoard(ctx, state) {
 
 export function resizeCanvas(canvas) {
   const parent = canvas.parentElement;
-  const w = Math.max(280, parent.clientWidth);
-  const h = Math.max(280, parent.clientHeight || Math.floor(window.innerHeight * 0.55));
+  const rect = parent.getBoundingClientRect();
+  // Use the real board-wrap box only — never invent a taller canvas that forces page scroll
+  const w = Math.max(200, Math.floor(rect.width) || parent.clientWidth || 200);
+  const h = Math.max(200, Math.floor(rect.height) || parent.clientHeight || 200);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
-  canvas.style.width = `${w}px`;
-  canvas.style.height = `${h}px`;
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   canvas._logicW = w;

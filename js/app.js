@@ -41,6 +41,7 @@ function show(screen) {
     el.hidden = el !== screen;
     el.classList.toggle('active', el === screen);
   }
+  document.body.classList.toggle('playing', screen === playScreen);
 }
 
 function renderShipCard(ship) {
@@ -201,7 +202,11 @@ function startGame(settings) {
     game.mode = 'move';
   }
   refresh();
-  requestAnimationFrame(() => boardApi.paint());
+  // Two frames: body.playing locks layout, then measure the real board-wrap box
+  requestAnimationFrame(() => {
+    boardApi.paint();
+    requestAnimationFrame(() => boardApi.paint());
+  });
 }
 
 btnMove.addEventListener('click', () => {
