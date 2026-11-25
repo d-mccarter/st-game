@@ -252,82 +252,79 @@ function drawHexIso(ctx, col, row, originX, originY, camera, fill, stroke) {
   }
 }
 
+/** Screen angles for facings E, NE, NW, W, SW, SE (canvas Y-down). */
+const FACING_RAD = [0, -Math.PI / 3, (-2 * Math.PI) / 3, Math.PI, (2 * Math.PI) / 3, Math.PI / 3];
+const FACING_LABEL = ['E', 'NE', 'NW', 'W', 'SW', 'SE'];
+
 /**
- * Headings in flat board (wx, wy) space for facings E, NE, NW, W, SW, SE.
- * Matched to odd-q even-column neighbor deltas.
+ * Draw 3/4 isometric mini sprites upright on their stands.
+ * Only mirror for westward headings — full yaw tipped the flight stands.
  */
-const EVEN_FACING_DELTA = [
-  [1, 0],
-  [1, -1],
-  [0, -1],
-  [-1, -1],
-  [-1, 0],
-  [0, 1],
-];
-
-/** Bow in top-down PNGs points toward the top of the image (−Y in local space). */
-const ART_NOSE_LOCAL = -Math.PI / 2;
-
-function boardHeading(facing) {
-  const [dc, dr] = EVEN_FACING_DELTA[((facing % 6) + 6) % 6];
-  const from = flatCenter(2, 2);
-  const to = flatCenter(2 + dc, 2 + dr);
-  return Math.atan2(to.wy - from.wy, to.wx - from.wx);
-}
-
-function withBoardPlane(ctx, x, y, zoom, fn) {
-  ctx.save();
-  ctx.translate(x, y);
-  // Map flat board axes → screen (same basis as isoProject)
-  ctx.transform(ISO_X * zoom, ISO_Y * zoom, -ISO_X * zoom, ISO_Y * zoom, 0, 0);
-  fn();
-  ctx.restore();
-}
-
 function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
+  const size = HEX * camera.zoom * (heavy ? 1.05 : 0.9);
   const facing = ((ship.facing % 6) + 6) % 6;
-  const heading = boardHeading(facing);
-  // Top-down tokens sized to sit inside a hex on the board plane
-  const worldSize = HEX * (heavy ? 0.95 : 0.8);
-  const z = camera.zoom;
+  const heading = FACING_RAD[facing];
+  const mirror = facing === 2 || facing === 3 || facing === 4; // NW, W, SW
 
-  withBoardPlane(ctx, x, y, z, () => {
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(x, y + size * 0.22, size * 0.28, size * 0.12, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fill();
+  ctx.restore();
+
+  if (img) {
+    ctx.save();
+    ctx.translate(x, y - size * 0.04);
+    if (mirror) ctx.scale(-1, 1);
+    ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    ctx.restore();
+  } else {
     ctx.beginPath();
-    ctx.ellipse(0, 0, worldSize * 0.36, worldSize * 0.36, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fill();
-  });
-
-  withBoardPlane(ctx, x, y, z, () => {
-    ctx.rotate(heading - ART_NOSE_LOCAL);
-    if (img) {
-      ctx.drawImage(img, -worldSize / 2, -worldSize / 2, worldSize, worldSize);
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(0, -worldSize * 0.4);
-      ctx.lineTo(worldSize * 0.22, worldSize * 0.25);
-      ctx.lineTo(-worldSize * 0.22, worldSize * 0.25);
-      ctx.closePath();
-      ctx.fillStyle = factionColor;
-      ctx.fill();
-    }
-  });
-
-  withBoardPlane(ctx, x, y, z, () => {
-    ctx.rotate(heading);
-    ctx.beginPath();
-    ctx.moveTo(worldSize * 0.5, 0);
-    ctx.lineTo(worldSize * 0.3, worldSize * 0.11);
-    ctx.lineTo(worldSize * 0.3, -worldSize * 0.11);
+    ctx.moveTo(x + Math.cos(heading) * size * 0.4, y + Math.sin(heading) * size * 0.4);
+    ctx.lineTo(
+      x + Math.cos(heading + 2.4) * size * 0.25,
+      y + Math.sin(heading + 2.4) * size * 0.25
+    );
+    ctx.lineTo(
+      x + Math.cos(heading - 2.4) * size * 0.25,
+      y + Math.sin(heading - 2.4) * size * 0.25
+    );
     ctx.closePath();
-    ctx.fillStyle = selected ? '#ffe08a' : '#f2f7fb';
-    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-    ctx.lineWidth = 1 / Math.max(z, 0.5);
+    ctx.fillStyle = factionColor;
     ctx.fill();
-    ctx.stroke();
-  });
+  }
+
+  // Facing chevron on the base — matches Orders panel heading
+  const s = Math.max(0.85, camera.zoom);
+  const bx = x + Math.cos(heading) * size * 0.4;
+  const by = y + Math.sin(heading) * size * 0.28;
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.rotate(heading);
+  ctx.beginPath();
+  ctx.moveTo(7 * s, 0);
+  ctx.lineTo(-5 * s, 4.5 * s);
+  ctx.lineTo(-5 * s, -4.5 * s);
+  ctx.closePath();
+  ctx.fillStyle = selected ? '#ffe08a' : '#f2f7fb';
+  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+  ctx.lineWidth = 1.25;
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = `700 ${Math.max(10, 11 * camera.zoom)}px Rajdhani, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillText(FACING_LABEL[facing], x + 1, y + size * 0.48 + 1);
+  ctx.fillStyle = selected ? '#ffe08a' : '#e8f2f7';
+  ctx.fillText(FACING_LABEL[facing], x, y + size * 0.48);
+  ctx.restore();
 }
 
 export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, blockedSet, camera) {
