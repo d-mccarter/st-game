@@ -13,6 +13,7 @@ import {
   getBoardView,
 } from './game.js';
 import { MAPS } from './data.js';
+import { preloadShips } from './ships.js';
 
 const setupScreen = document.getElementById('screen-setup');
 const playScreen = document.getElementById('screen-play');
@@ -62,10 +63,16 @@ function renderShipCard(ship) {
     })
     .join('');
 
+  const thumb = `assets/ships/${ship.typeId}.png`;
   selectedCard.className = 'ship-card';
   selectedCard.innerHTML = `
-    <p class="name">${ship.name}</p>
-    <p class="faction">${fac.name}${active ? ' · ACTIVE' : ''}${yours ? '' : ' · hostile'}</p>
+    <div class="ship-card-head">
+      <img class="ship-thumb" src="${thumb}" alt="" width="72" height="72">
+      <div>
+        <p class="name">${ship.name}</p>
+        <p class="faction">${fac.name}${active ? ' · ACTIVE' : ''}${yours ? '' : ' · hostile'}</p>
+      </div>
+    </div>
     <div class="stat-grid">
       <div class="stat">
         <span>Hull</span>
@@ -239,6 +246,11 @@ btnMenu.addEventListener('click', () => {
 btnAgain.addEventListener('click', () => {
   game = null;
   show(setupScreen);
+});
+
+preloadShips().then(() => {
+  // Repaint if a battle is already on screen when sprites finish loading
+  if (game) boardApi?.paint();
 });
 
 initSetup(setupScreen, startGame);

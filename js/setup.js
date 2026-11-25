@@ -1,4 +1,5 @@
 import { FACTIONS, shipsForFaction, SHIP_TYPES } from './data.js';
+import { shipSrc } from './ships.js';
 
 export function initSetup(root, onStart) {
   const form = root.querySelector('#setup-form');
@@ -43,10 +44,14 @@ export function initSetup(root, onStart) {
       if (counts[ship.id] == null) counts[ship.id] = ship.id.endsWith('ff') || ship.id === 'f5' ? 1 : 1;
       const row = document.createElement('div');
       row.className = 'ship-pick';
+      const art = shipSrc(ship.id);
       row.innerHTML = `
-        <div>
-          <h3>${ship.name}</h3>
-          <p>${FACTIONS[faction].short} · ${ship.cost} pts</p>
+        <div class="ship-pick-main">
+          ${art ? `<img class="ship-thumb" src="${art}" alt="" width="64" height="64">` : ''}
+          <div>
+            <h3>${ship.name}</h3>
+            <p>${FACTIONS[faction].short} · ${ship.cost} pts</p>
+          </div>
         </div>
         <div class="qty">
           <button type="button" data-act="dec" data-id="${ship.id}" aria-label="Fewer">−</button>

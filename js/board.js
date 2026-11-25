@@ -2,6 +2,8 @@
  * Isometric diamond grid. Tile size scales to fill the canvas.
  */
 
+import { shipImage } from './ships.js';
+
 let TILE_W = 72;
 let TILE_H = 36;
 
@@ -107,22 +109,34 @@ function drawDiamond(ctx, x, y, fill, stroke) {
   }
 }
 
-function shipPath(ctx, x, y, facing, scale = 1) {
-  const angles = [-90, -30, 30, 90, 150, -150].map((d) => (d * Math.PI) / 180);
-  const a = angles[facing % 6];
-  const s = (TILE_W / 72) * scale;
-  const len = 16 * s;
-  const wing = 10 * s;
-  const tipX = x + Math.cos(a) * len;
-  const tipY = y + Math.sin(a) * len;
-  const leftX = x + Math.cos(a + 2.4) * wing;
-  const leftY = y + Math.sin(a + 2.4) * wing;
-  const rightX = x + Math.cos(a - 2.4) * wing;
-  const rightY = y + Math.sin(a - 2.4) * wing;
+/** Sprite art faces "up" (north). Facing 0..5 maps to board directions. */
+const FACING_RAD = [-Math.PI / 2, -Math.PI / 6, Math.PI / 6, Math.PI / 2, (5 * Math.PI) / 6, (-5 * Math.PI) / 6];
+
+function drawShipSprite(ctx, ship, x, y, selected) {
+  const img = shipImage(ship.typeId);
+  const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
+  const size = TILE_W * (heavy ? 1.15 : 0.95);
+
+  if (img) {
+    ctx.save();
+    ctx.translate(x, y - TILE_H * 0.08);
+    ctx.rotate(FACING_RAD[ship.facing % 6] - FACING_RAD[0]); // art faces up = facing 0
+    if (selected) {
+      ctx.shadowColor = 'rgba(255, 220, 120, 0.85)';
+      ctx.shadowBlur = 14;
+    }
+    ctx.drawImage(img, -size / 2, -size / 2, size, size);
+    ctx.restore();
+    return;
+  }
+
+  // Fallback triangle if sprite missing
+  const a = FACING_RAD[ship.facing % 6];
+  const s = size / 72;
   ctx.beginPath();
-  ctx.moveTo(tipX, tipY);
-  ctx.lineTo(leftX, leftY);
-  ctx.lineTo(rightX, rightY);
+  ctx.moveTo(x + Math.cos(a) * 16 * s, y + Math.sin(a) * 16 * s);
+  ctx.lineTo(x + Math.cos(a + 2.4) * 10 * s, y + Math.sin(a + 2.4) * 10 * s);
+  ctx.lineTo(x + Math.cos(a - 2.4) * 10 * s, y + Math.sin(a - 2.4) * 10 * s);
   ctx.closePath();
 }
 
@@ -209,24 +223,25 @@ export function drawBoard(ctx, state) {
     const selectedShip = ship.id === selectedId;
 
     if (selectedShip) {
-      drawDiamond(ctx, x, y, 'rgba(255, 220, 120, 0.25)', 'rgba(255, 220, 120, 0.9)');
+      drawDiamond(ctx, x, y, 'rgba(255, 220, 120, 0.2)', 'rgba(255, 220, 120, 0.85)');
     }
 
+    // Soft faction glow under the sprite
     ctx.save();
-    shipPath(ctx, x, y - 2, ship.facing, ship.typeId === 'ca' || ship.typeId === 'd7' ? 1.15 : 1);
-    ctx.fillStyle = fac.color;
-    ctx.strokeStyle = fac.accent;
-    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 2, TILE_W * 0.28, TILE_H * 0.28, 0, 0, Math.PI * 2);
+    ctx.fillStyle = fac.color + '55';
     ctx.fill();
-    ctx.stroke();
+    ctx.restore();
+
+    drawShipSprite(ctx, ship, x, y, selectedShip);
 
     const ratio = ship.hull / ship.hullMax;
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x - pip / 2, y + TILE_H * 0.35, pip, 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(x - pip / 2, y + TILE_H * 0.42, pip, 4);
     ctx.fillStyle = ratio > 0.4 ? '#5dce9a' : '#e2b84a';
     if (ratio <= 0.25) ctx.fillStyle = '#e35d5d';
-    ctx.fillRect(x - pip / 2, y + TILE_H * 0.35, pip * ratio, 4);
-    ctx.restore();
+    ctx.fillRect(x - pip / 2, y + TILE_H * 0.42, pip * ratio, 4);
   }
 
   return { originX, originY };

@@ -1,4 +1,4 @@
-const CACHE = 'starfleet-tactics-v1';
+const CACHE = 'starfleet-tactics-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -8,9 +8,14 @@ const ASSETS = [
   './js/game.js',
   './js/board.js',
   './js/data.js',
+  './js/ships.js',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './assets/ships/ca.png',
+  './assets/ships/ff.png',
+  './assets/ships/d7.png',
+  './assets/ships/f5.png'
 ];
 
 self.addEventListener('install', (event) => {
