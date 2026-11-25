@@ -15,8 +15,25 @@ export function initSetup(root, onStart) {
     return factionEl.value;
   }
 
+  const POINTS_MIN = 50;
+  const POINTS_MAX = 1000;
+  const POINTS_STEP = 25;
+
+  function snapPoints(raw) {
+    let n = Number(raw);
+    if (!Number.isFinite(n)) n = 150;
+    n = Math.round(n / POINTS_STEP) * POINTS_STEP;
+    return Math.min(POINTS_MAX, Math.max(POINTS_MIN, n));
+  }
+
   function points() {
-    return Number(pointsEl.value);
+    return snapPoints(pointsEl.value);
+  }
+
+  function syncPointsInput() {
+    const n = snapPoints(pointsEl.value);
+    if (String(n) !== pointsEl.value) pointsEl.value = String(n);
+    return n;
   }
 
   function spent() {
@@ -28,8 +45,9 @@ export function initSetup(root, onStart) {
   }
 
   function syncBudget() {
-    budgetEl.textContent = `${spent()} / ${points()}`;
-    budgetEl.style.color = spent() > points() ? 'var(--danger)' : 'var(--warn)';
+    const pts = syncPointsInput();
+    budgetEl.textContent = `${spent()} / ${pts}`;
+    budgetEl.style.color = spent() > pts ? 'var(--danger)' : 'var(--warn)';
   }
 
   function renderBuilder() {
@@ -84,10 +102,12 @@ export function initSetup(root, onStart) {
 
   factionEl.addEventListener('change', renderBuilder);
   pointsEl.addEventListener('change', syncBudget);
+  pointsEl.addEventListener('blur', syncBudget);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     errorEl.hidden = true;
+    const pts = syncPointsInput();
     const fleet = { ...counts };
     const total = spent();
     const shipCount = Object.values(fleet).reduce((a, b) => a + b, 0);
@@ -96,13 +116,13 @@ export function initSetup(root, onStart) {
       errorEl.textContent = 'Build at least one ship.';
       return;
     }
-    if (total > points()) {
+    if (total > pts) {
       errorEl.hidden = false;
       errorEl.textContent = 'Fleet exceeds starting points.';
       return;
     }
     onStart({
-      points: points(),
+      points: pts,
       faction: currentFaction(),
       map: form.map.value,
       boardSize: form.boardSize.value,
@@ -113,5 +133,6 @@ export function initSetup(root, onStart) {
     });
   });
 
+  syncPointsInput();
   renderBuilder();
 }

@@ -30,11 +30,8 @@
             <legend>Match</legend>
             <label class="field">
               <span>Starting points</span>
-              <select name="points" id="opt-points">
-                <option value="100">100 — skirmish</option>
-                <option value="150" selected>150 — standard</option>
-                <option value="200">200 — fleet action</option>
-              </select>
+              <input type="number" name="points" id="opt-points" min="50" max="1000" step="25" value="150" inputmode="numeric">
+              <span class="field-hint">50–1000 in steps of 25</span>
             </label>
             <label class="field">
               <span>Your faction</span>

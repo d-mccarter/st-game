@@ -7,7 +7,7 @@ Simplified graphical **Starfleet Battles** you can open as a webpage (desktop or
 
 ## What’s in v1
 
-1. **Setup** — starting points, faction, map type, board size (9×9 to 18×14), custom rules, fleet builder  
+1. **Setup** — starting points (50–1000 by 25s), faction, map type, board size (9×9 to 18×14), custom rules, fleet builder  
 2. **Isometric board** — hex map (void / asteroids / nebula)  
 3. **Two factions × two ships** — Federation Constitution-class & Miranda-class; Klingon D7 & Bird of Prey  
 4. **Tap / click movement** — legal move hexes highlight when your ship is selected; ships glide between hexes and weapons fire with beam/bolt FX  
