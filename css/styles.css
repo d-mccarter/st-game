@@ -438,6 +438,10 @@ legend {
   background: transparent;
   border: 2px dashed rgba(255, 214, 120, 0.95);
 }
+.swatch.rock {
+  background: radial-gradient(circle at 35% 35%, #9a8a72, #4a4034 70%);
+  border-radius: 50%;
+}
 
 .mode-hint {
   margin: 0.65rem 0 0;

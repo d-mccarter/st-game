@@ -16,6 +16,7 @@ import {
 } from './game.js';
 import { MAPS } from './data.js';
 import { preloadShips } from './ships.js';
+import { preloadAsteroids } from './asteroids.js';
 
 const setupScreen = document.getElementById('screen-setup');
 const playScreen = document.getElementById('screen-play');
@@ -298,7 +299,7 @@ btnAgain.addEventListener('click', () => {
   show(setupScreen);
 });
 
-preloadShips().then(() => {
+Promise.all([preloadShips(), preloadAsteroids()]).then(() => {
   // Repaint if a battle is already on screen when sprites finish loading
   if (game) boardApi?.paint();
 });

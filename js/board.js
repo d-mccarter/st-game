@@ -3,6 +3,7 @@
  */
 
 import { shipImage } from './ships.js';
+import { asteroidImage } from './asteroids.js';
 import { shipDrawCell, lerpScreen } from './fx.js';
 
 /** Base hex radius in world units (before iso + zoom) */
@@ -575,8 +576,13 @@ export function drawBoard(ctx, state) {
   for (const { c, r } of cells) {
     const k = key(c, r);
     const blocked = blockedSet.has(k);
-    let fill = blocked ? 'rgba(40, 28, 22, 0.78)' : 'rgba(40, 90, 120, 0.28)';
-    let stroke = blocked ? 'rgba(120, 80, 50, 0.5)' : 'rgba(140, 200, 220, 0.4)';
+    // Asteroid hexes keep a normal space fill; the rock sprite marks the hazard
+    let fill = 'rgba(40, 90, 120, 0.28)';
+    let stroke = 'rgba(140, 200, 220, 0.4)';
+    if (blocked) {
+      fill = 'rgba(35, 55, 70, 0.35)';
+      stroke = 'rgba(160, 140, 110, 0.45)';
+    }
     if (moveSet.has(k)) {
       fill = 'rgba(70, 190, 210, 0.45)';
       stroke = 'rgba(140, 230, 250, 0.95)';
@@ -586,6 +592,29 @@ export function drawBoard(ctx, state) {
       stroke = 'rgba(255, 140, 90, 0.95)';
     }
     drawHexIso(ctx, c, r, originX, originY, camera, fill, stroke);
+  }
+
+  // Asteroid sprites on blocked hexes (drawn after tiles, before ships)
+  for (const { c, r } of cells) {
+    if (!blockedSet.has(key(c, r))) continue;
+    const img = asteroidImage(c, r);
+    const { x, y } = gridToScreen(c, r, originX, originY, camera);
+    const size = HEX * camera.zoom * 1.15;
+    ctx.save();
+    // Soft contact shadow in board plane
+    ctx.beginPath();
+    ctx.ellipse(x, y + size * 0.12, size * 0.32, size * 0.14, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fill();
+    if (img) {
+      ctx.drawImage(img, x - size / 2, y - size * 0.55, size, size);
+    } else {
+      ctx.fillStyle = 'rgba(120, 100, 80, 0.9)';
+      ctx.beginPath();
+      ctx.ellipse(x, y - size * 0.05, size * 0.28, size * 0.18, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   const selected = ships.find((s) => s.id === selectedId && s.alive);
