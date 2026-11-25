@@ -264,8 +264,8 @@ const EVEN_FACING_DELTA = [
   [0, 1],
 ];
 
-/** Bow in the PNG points toward image bottom-left (local atan2). */
-const ART_NOSE_LOCAL = (3 * Math.PI) / 4;
+/** Bow in top-down PNGs points toward the top of the image (−Y in local space). */
+const ART_NOSE_LOCAL = -Math.PI / 2;
 
 function boardHeading(facing) {
   const [dc, dr] = EVEN_FACING_DELTA[((facing % 6) + 6) % 6];
@@ -274,64 +274,59 @@ function boardHeading(facing) {
   return Math.atan2(to.wy - from.wy, to.wx - from.wx);
 }
 
+function withBoardPlane(ctx, x, y, zoom, fn) {
+  ctx.save();
+  ctx.translate(x, y);
+  // Map flat board axes → screen (same basis as isoProject)
+  ctx.transform(ISO_X * zoom, ISO_Y * zoom, -ISO_X * zoom, ISO_Y * zoom, 0, 0);
+  fn();
+  ctx.restore();
+}
+
 function drawShipSprite(ctx, ship, x, y, selected, factionColor, camera) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
   const facing = ((ship.facing % 6) + 6) % 6;
   const heading = boardHeading(facing);
-  // Size in board/world units; transform below maps world → screen with zoom
-  const worldSize = HEX * (heavy ? 1.0 : 0.85);
+  // Top-down tokens sized to sit inside a hex on the board plane
+  const worldSize = HEX * (heavy ? 0.95 : 0.8);
   const z = camera.zoom;
 
-  // Soft contact shadow in board plane
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.transform(ISO_X * z, ISO_Y * z, -ISO_X * z, ISO_Y * z, 0, 0);
-  ctx.beginPath();
-  ctx.ellipse(0, 0, worldSize * 0.32, worldSize * 0.32, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fill();
-  ctx.restore();
+  withBoardPlane(ctx, x, y, z, () => {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, worldSize * 0.36, worldSize * 0.36, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fill();
+  });
 
-  if (img) {
-    ctx.save();
-    ctx.translate(x, y);
-    // Map board-plane axes to screen (same basis as isoProject), then yaw on the board
-    ctx.transform(ISO_X * z, ISO_Y * z, -ISO_X * z, ISO_Y * z, 0, 0);
+  withBoardPlane(ctx, x, y, z, () => {
     ctx.rotate(heading - ART_NOSE_LOCAL);
-    ctx.drawImage(img, -worldSize / 2, -worldSize / 2, worldSize, worldSize);
-    ctx.restore();
-  } else {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.transform(ISO_X * z, ISO_Y * z, -ISO_X * z, ISO_Y * z, 0, 0);
+    if (img) {
+      ctx.drawImage(img, -worldSize / 2, -worldSize / 2, worldSize, worldSize);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(0, -worldSize * 0.4);
+      ctx.lineTo(worldSize * 0.22, worldSize * 0.25);
+      ctx.lineTo(-worldSize * 0.22, worldSize * 0.25);
+      ctx.closePath();
+      ctx.fillStyle = factionColor;
+      ctx.fill();
+    }
+  });
+
+  withBoardPlane(ctx, x, y, z, () => {
     ctx.rotate(heading);
     ctx.beginPath();
-    ctx.moveTo(worldSize * 0.4, 0);
-    ctx.lineTo(-worldSize * 0.25, worldSize * 0.22);
-    ctx.lineTo(-worldSize * 0.25, -worldSize * 0.22);
+    ctx.moveTo(worldSize * 0.5, 0);
+    ctx.lineTo(worldSize * 0.3, worldSize * 0.11);
+    ctx.lineTo(worldSize * 0.3, -worldSize * 0.11);
     ctx.closePath();
-    ctx.fillStyle = factionColor;
+    ctx.fillStyle = selected ? '#ffe08a' : '#f2f7fb';
+    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+    ctx.lineWidth = 1 / Math.max(z, 0.5);
     ctx.fill();
-    ctx.restore();
-  }
-
-  // Facing chevron, also in the board plane
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.transform(ISO_X * z, ISO_Y * z, -ISO_X * z, ISO_Y * z, 0, 0);
-  ctx.rotate(heading);
-  ctx.beginPath();
-  ctx.moveTo(worldSize * 0.48, 0);
-  ctx.lineTo(worldSize * 0.28, worldSize * 0.12);
-  ctx.lineTo(worldSize * 0.28, -worldSize * 0.12);
-  ctx.closePath();
-  ctx.fillStyle = selected ? '#ffe08a' : '#f2f7fb';
-  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-  ctx.lineWidth = 1 / Math.max(z, 0.5);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+    ctx.stroke();
+  });
 }
 
 export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, blockedSet, camera) {
