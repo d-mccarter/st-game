@@ -19,7 +19,7 @@ export const FACTIONS = {
 
 /**
  * Ship stats are intentionally small for a playable first slice.
- * facing: 0=N, 1=NE, 2=SE, 3=S, 4=SW, 5=NW (pointy-top hex style on iso grid)
+ * facing: 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE (flat-top hex)
  * arcs: relative facing offsets that can be targeted (0 = forward)
  */
 export const SHIP_TYPES = {

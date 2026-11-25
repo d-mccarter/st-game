@@ -91,7 +91,7 @@ function renderShipCard(ship) {
       </div>
       <div class="stat">
         <span>Facing</span>
-        <strong>${['N', 'NE', 'SE', 'S', 'SW', 'NW'][ship.facing] || ship.facing}</strong>
+        <strong>${['E', 'NE', 'NW', 'W', 'SW', 'SE'][ship.facing] || ship.facing}</strong>
       </div>
     </div>
     <p style="margin:0 0 0.35rem;color:var(--muted);font-size:0.9rem">Weapons — tap one to show its firing arc on the board</p>

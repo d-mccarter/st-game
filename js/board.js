@@ -1,52 +1,95 @@
 /**
- * Isometric diamond grid. Tile size scales to fill the canvas.
+ * Flat-top hex grid (odd-q offset) for Starfleet Battles–style play.
  */
 
 import { shipImage } from './ships.js';
 
-let TILE_W = 72;
-let TILE_H = 36;
+/** Hex size = center → vertex distance */
+let HEX = 36;
 
 export function tileSize() {
-  return { w: TILE_W, h: TILE_H };
+  return { w: HEX * 2, h: HEX * Math.sqrt(3), hex: HEX };
 }
 
 export function fitTiles(canvas, cols, rows) {
   const w = canvas._logicW || canvas.width;
   const h = canvas._logicH || canvas.height;
-  // Diamond projection span: (cols+rows) half-tiles wide and tall
-  const span = (cols + rows) / 2;
-  const pad = Math.max(12, Math.min(w, h) * 0.04);
-  const maxW = Math.max(36, (w - pad * 2) / span);
-  const maxH = Math.max(18, (h - pad * 2) / span);
-  // Fill the board area; keep 2:1 diamond aspect (no artificial size cap)
-  TILE_W = Math.floor(Math.min(maxW, maxH * 2));
-  TILE_H = Math.floor(TILE_W / 2);
+  const pad = Math.max(10, Math.min(w, h) * 0.03);
+  // Flat-top odd-q: width ≈ cols * 1.5*size + 0.5*size, height ≈ rows * sqrt(3)*size + 0.5*sqrt(3)*size
+  const maxByW = (w - pad * 2) / (cols * 1.5 + 0.5);
+  const maxByH = (h - pad * 2) / ((rows + 0.5) * Math.sqrt(3));
+  HEX = Math.max(18, Math.floor(Math.min(maxByW, maxByH)));
   return tileSize();
 }
 
+/** Flat-top odd-q → screen */
 export function gridToScreen(col, row, originX, originY) {
-  const x = originX + (col - row) * (TILE_W / 2);
-  const y = originY + (col + row) * (TILE_H / 2);
+  const x = originX + HEX * (1.5 * col);
+  const y = originY + HEX * Math.sqrt(3) * (row + 0.5 * (col & 1));
   return { x, y };
 }
 
 export function screenToGrid(px, py, originX, originY, cols, rows) {
-  const dx = px - originX;
-  const dy = py - originY;
-  const col = Math.round(dx / TILE_W + dy / TILE_H);
-  const row = Math.round(dy / TILE_H - dx / TILE_W);
-  if (col < 0 || row < 0 || col >= cols || row >= rows) return null;
+  // Inverse flat-top → fractional axial, then cube-round → odd-q
+  const x = (px - originX) / HEX;
+  const y = (py - originY) / HEX;
+  const q = (2 / 3) * x;
+  const r = (-1 / 3) * x + (Math.sqrt(3) / 3) * y;
+  const cube = axialToCube(q, r);
+  const rounded = cubeRound(cube.x, cube.y, cube.z);
+  const oddq = cubeToOddQ(rounded.x, rounded.y, rounded.z);
+  if (oddq.col < 0 || oddq.row < 0 || oddq.col >= cols || oddq.row >= rows) return null;
+  return oddq;
+}
+
+function axialToCube(q, r) {
+  const x = q;
+  const z = r;
+  const y = -x - z;
+  return { x, y, z };
+}
+
+function cubeRound(x, y, z) {
+  let rx = Math.round(x);
+  let ry = Math.round(y);
+  let rz = Math.round(z);
+  const xDiff = Math.abs(rx - x);
+  const yDiff = Math.abs(ry - y);
+  const zDiff = Math.abs(rz - z);
+  if (xDiff > yDiff && xDiff > zDiff) rx = -ry - rz;
+  else if (yDiff > zDiff) ry = -rx - rz;
+  else rz = -rx - ry;
+  return { x: rx, y: ry, z: rz };
+}
+
+function cubeToOddQ(x, _y, z) {
+  const col = x;
+  const row = z + (x - (x & 1)) / 2;
   return { col, row };
 }
 
+function oddQToCube(col, row) {
+  const x = col;
+  const z = row - (col - (col & 1)) / 2;
+  const y = -x - z;
+  return { x, y, z };
+}
+
+/** 6 neighbors for odd-q flat-top */
 export function neighbors(col, row, cols, rows) {
   const deltas = [
-    [1, 0], [-1, 0], [0, 1], [0, -1],
-    [1, -1], [-1, 1],
+    [
+      [+1, 0], [+1, -1], [0, -1],
+      [-1, -1], [-1, 0], [0, +1],
+    ],
+    [
+      [+1, +1], [+1, 0], [0, -1],
+      [-1, 0], [-1, +1], [0, +1],
+    ],
   ];
+  const parity = col & 1;
   const out = [];
-  for (const [dc, dr] of deltas) {
+  for (const [dc, dr] of deltas[parity]) {
     const c = col + dc;
     const r = row + dr;
     if (c >= 0 && r >= 0 && c < cols && r < rows) out.push({ col: c, row: r });
@@ -58,18 +101,30 @@ export function key(col, row) {
   return `${col},${row}`;
 }
 
+/** Facing 0..5 around flat-top hex (0 = E, then counter-clockwise: NE, NW, W, SW, SE) */
+const CUBE_DIRS = [
+  { x: +1, y: -1, z: 0 }, // E
+  { x: +1, y: 0, z: -1 }, // NE
+  { x: 0, y: +1, z: -1 }, // NW
+  { x: -1, y: +1, z: 0 }, // W
+  { x: -1, y: 0, z: +1 }, // SW
+  { x: 0, y: -1, z: +1 }, // SE
+];
+
 export function facingToward(from, to) {
-  const dc = to.col - from.col;
-  const dr = to.row - from.row;
-  const table = {
-    '1,0': 1,
-    '1,-1': 0,
-    '0,-1': 5,
-    '-1,0': 4,
-    '-1,1': 3,
-    '0,1': 2,
-  };
-  return table[`${dc},${dr}`] ?? 0;
+  const a = oddQToCube(from.col, from.row);
+  const b = oddQToCube(to.col, to.row);
+  let best = 0;
+  let bestScore = -Infinity;
+  for (let i = 0; i < 6; i++) {
+    const d = CUBE_DIRS[i];
+    const score = d.x * (b.x - a.x) + d.y * (b.y - a.y) + d.z * (b.z - a.z);
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best;
 }
 
 export function facingDelta(fromFacing, toFacing) {
@@ -84,18 +139,22 @@ export function relativeArc(ship, targetCell) {
 export function computeOrigin(canvas, cols, rows) {
   const w = canvas._logicW || canvas.width;
   const h = canvas._logicH || canvas.height;
-  const gridH = (cols + rows) * (TILE_H / 2);
-  const originX = w / 2;
-  const originY = (h - gridH) / 2 + TILE_H / 2;
-  return { originX, originY, gridW: (cols + rows) * (TILE_W / 2), gridH };
+  const gridW = HEX * (cols * 1.5 + 0.5);
+  const gridH = HEX * Math.sqrt(3) * (rows + 0.5);
+  const originX = (w - gridW) / 2 + HEX;
+  const originY = (h - gridH) / 2 + HEX * Math.sqrt(3) / 2;
+  return { originX, originY, gridW, gridH };
 }
 
-function drawDiamond(ctx, x, y, fill, stroke) {
+function drawHex(ctx, x, y, fill, stroke) {
   ctx.beginPath();
-  ctx.moveTo(x, y - TILE_H / 2);
-  ctx.lineTo(x + TILE_W / 2, y);
-  ctx.lineTo(x, y + TILE_H / 2);
-  ctx.lineTo(x - TILE_W / 2, y);
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 180) * (60 * i); // flat-top: point at 0°
+    const px = x + HEX * Math.cos(angle);
+    const py = y + HEX * Math.sin(angle);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
   ctx.closePath();
   if (fill) {
     ctx.fillStyle = fill;
@@ -103,60 +162,56 @@ function drawDiamond(ctx, x, y, fill, stroke) {
   }
   if (stroke) {
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.25;
     ctx.stroke();
   }
 }
 
-/** Board facing → screen angle for the base chevron (iso camera stays fixed). */
-const FACING_RAD = [-Math.PI / 2, -Math.PI / 6, Math.PI / 6, Math.PI / 2, (5 * Math.PI) / 6, (-5 * Math.PI) / 6];
+/** Screen angles for facing chevron (flat-top: 0=E …) */
+const FACING_RAD = [0, -Math.PI / 3, (-2 * Math.PI) / 3, Math.PI, (2 * Math.PI) / 3, Math.PI / 3];
 
 function drawShipSprite(ctx, ship, x, y, selected, factionColor) {
   const img = shipImage(ship.typeId);
   const heavy = ship.typeId === 'ca' || ship.typeId === 'd7';
-  // Miniatures sit large on the hex, like physical stands
-  const size = TILE_W * (heavy ? 1.55 : 1.35);
+  // Keep minis clearly smaller than a hex
+  const size = HEX * (heavy ? 1.15 : 1.0);
   const facing = ship.facing % 6;
-  // Mirror when facing "port/west" so the nose reads correctly without tipping the iso mini
-  const mirror = facing === 3 || facing === 4 || facing === 5;
+  const mirror = facing === 2 || facing === 3 || facing === 4;
 
-  // Ground contact shadow
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(x, y + TILE_H * 0.22, TILE_W * 0.32, TILE_H * 0.22, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.ellipse(x, y + HEX * 0.28, HEX * 0.28, HEX * 0.14, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fill();
   ctx.restore();
 
   if (img) {
     ctx.save();
-    ctx.translate(x, y - size * 0.12);
+    ctx.translate(x, y - size * 0.08);
     if (mirror) ctx.scale(-1, 1);
     ctx.drawImage(img, -size / 2, -size / 2, size, size);
     ctx.restore();
   } else {
     const a = FACING_RAD[facing];
-    const s = size / 72;
     ctx.beginPath();
-    ctx.moveTo(x + Math.cos(a) * 16 * s, y + Math.sin(a) * 16 * s);
-    ctx.lineTo(x + Math.cos(a + 2.4) * 10 * s, y + Math.sin(a + 2.4) * 10 * s);
-    ctx.lineTo(x + Math.cos(a - 2.4) * 10 * s, y + Math.sin(a - 2.4) * 10 * s);
+    ctx.moveTo(x + Math.cos(a) * size * 0.4, y + Math.sin(a) * size * 0.4);
+    ctx.lineTo(x + Math.cos(a + 2.4) * size * 0.25, y + Math.sin(a + 2.4) * size * 0.25);
+    ctx.lineTo(x + Math.cos(a - 2.4) * size * 0.25, y + Math.sin(a - 2.4) * size * 0.25);
     ctx.closePath();
     ctx.fillStyle = factionColor;
     ctx.fill();
   }
 
-  // Facing chevron on the stand edge (reads like a painted base arrow)
   const a = FACING_RAD[facing];
-  const bx = x + Math.cos(a) * TILE_W * 0.28;
-  const by = y + Math.sin(a) * TILE_H * 0.28 + TILE_H * 0.12;
+  const bx = x + Math.cos(a) * HEX * 0.42;
+  const by = y + Math.sin(a) * HEX * 0.42;
   ctx.save();
   ctx.translate(bx, by);
   ctx.rotate(a);
   ctx.beginPath();
-  ctx.moveTo(6, 0);
-  ctx.lineTo(-4, 3.5);
-  ctx.lineTo(-4, -3.5);
+  ctx.moveTo(5, 0);
+  ctx.lineTo(-3.5, 3);
+  ctx.lineTo(-3.5, -3);
   ctx.closePath();
   ctx.fillStyle = selected ? '#ffe08a' : '#e8f2f7';
   ctx.strokeStyle = 'rgba(0,0,0,0.55)';
@@ -184,7 +239,7 @@ export function drawFiringArcs(ctx, ship, weapon, originX, originY, cols, rows, 
       seen.add(k);
       frontier.push({ ...n, dist: cur.dist + 1 });
       const { x, y } = gridToScreen(n.col, n.row, originX, originY);
-      drawDiamond(ctx, x, y, 'rgba(220, 110, 60, 0.28)', 'rgba(240, 150, 90, 0.55)');
+      drawHex(ctx, x, y, 'rgba(220, 110, 60, 0.28)', 'rgba(240, 150, 90, 0.55)');
     }
   }
 }
@@ -222,17 +277,17 @@ export function drawBoard(ctx, state) {
       const { x, y } = gridToScreen(c, r, originX, originY);
       const k = key(c, r);
       const blocked = blockedSet.has(k);
-      let fill = blocked ? 'rgba(40, 28, 22, 0.75)' : 'rgba(40, 90, 120, 0.22)';
-      let stroke = blocked ? 'rgba(120, 80, 50, 0.45)' : 'rgba(120, 180, 210, 0.28)';
+      let fill = blocked ? 'rgba(40, 28, 22, 0.75)' : 'rgba(40, 90, 120, 0.2)';
+      let stroke = blocked ? 'rgba(120, 80, 50, 0.45)' : 'rgba(120, 180, 210, 0.35)';
       if (moveSet.has(k)) {
         fill = 'rgba(70, 190, 210, 0.42)';
-        stroke = 'rgba(140, 230, 250, 0.9)';
+        stroke = 'rgba(140, 230, 250, 0.95)';
       }
       if (fireSet.has(k)) {
         fill = 'rgba(210, 80, 50, 0.4)';
         stroke = 'rgba(255, 140, 90, 0.95)';
       }
-      drawDiamond(ctx, x, y, fill, stroke);
+      drawHex(ctx, x, y, fill, stroke);
     }
   }
 
@@ -241,18 +296,19 @@ export function drawBoard(ctx, state) {
     drawFiringArcs(ctx, selected, showArcsWeapon, originX, originY, cols, rows, blockedSet);
   }
 
-  const ordered = [...ships].filter((s) => s.alive).sort((a, b) => a.col + a.row - (b.col + b.row));
-  const pip = Math.max(10, TILE_W * 0.35);
+  const ordered = [...ships]
+    .filter((s) => s.alive)
+    .sort((a, b) => a.row - b.row || a.col - b.col);
+  const pip = Math.max(8, HEX * 0.45);
   for (const ship of ordered) {
     const { x, y } = gridToScreen(ship.col, ship.row, originX, originY);
     const fac = factions[ship.faction];
     const selectedShip = ship.id === selectedId;
 
     if (selectedShip) {
-      // Thin stand ring — reads as selection, not ship glow / move highlight
       ctx.save();
       ctx.beginPath();
-      ctx.ellipse(x, y + TILE_H * 0.2, TILE_W * 0.38, TILE_H * 0.26, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, y + HEX * 0.3, HEX * 0.4, HEX * 0.18, 0, 0, Math.PI * 2);
       ctx.strokeStyle = 'rgba(255, 214, 120, 0.95)';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 4]);
@@ -264,10 +320,10 @@ export function drawBoard(ctx, state) {
 
     const ratio = ship.hull / ship.hullMax;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(x - pip / 2, y + TILE_H * 0.55, pip, 4);
+    ctx.fillRect(x - pip / 2, y + HEX * 0.48, pip, 3);
     ctx.fillStyle = ratio > 0.4 ? '#5dce9a' : '#e2b84a';
     if (ratio <= 0.25) ctx.fillStyle = '#e35d5d';
-    ctx.fillRect(x - pip / 2, y + TILE_H * 0.55, pip * ratio, 4);
+    ctx.fillRect(x - pip / 2, y + HEX * 0.48, pip * ratio, 3);
   }
 
   return { originX, originY };
@@ -276,12 +332,13 @@ export function drawBoard(ctx, state) {
 export function resizeCanvas(canvas) {
   const parent = canvas.parentElement;
   const rect = parent.getBoundingClientRect();
-  // Use the real board-wrap box only — never invent a taller canvas that forces page scroll
   const w = Math.max(200, Math.floor(rect.width) || parent.clientWidth || 200);
   const h = Math.max(200, Math.floor(rect.height) || parent.clientHeight || 200);
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(w * dpr);
-  canvas.height = Math.floor(h * dpr);
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+  }
   canvas.style.width = '100%';
   canvas.style.height = '100%';
   const ctx = canvas.getContext('2d');

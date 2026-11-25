@@ -41,7 +41,8 @@ function spawnLine(faction, fleetCounts, side, map) {
   const baseRow = side === 'west' ? 1 : map.rows - 2;
   let col = 1;
   let slot = 0;
-  const facing = side === 'west' ? 1 : 4;
+  // Flat-top hex facing: 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE
+  const facing = side === 'west' ? 0 : 3;
   for (const [typeId, count] of Object.entries(fleetCounts)) {
     const def = SHIP_TYPES[typeId];
     if (!def || def.faction !== faction) continue;
@@ -497,49 +498,63 @@ export function attachBoardController(canvas, getGame, onChange) {
 
   const onPointer = (evt) => {
     const game = getGame();
-    if (!game || game.winner) return;
+    if (!game || game.winner) {
+      paint();
+      return;
+    }
     if (evt.preventDefault) evt.preventDefault();
-    resizeCanvas(canvas);
+
+    // Hit-test without clearing: measure only, then always repaint
+    const parent = canvas.parentElement.getBoundingClientRect();
+    canvas._logicW = Math.max(200, Math.floor(parent.width));
+    canvas._logicH = Math.max(200, Math.floor(parent.height));
     fitTiles(canvas, game.cols, game.rows);
     const { x, y } = eventToLogic(canvas, evt);
     const origin = computeOrigin(canvas, game.cols, game.rows);
     const cell = screenToGrid(x, y, origin.originX, origin.originY, game.cols, game.rows);
-    if (!cell) return;
 
-    const shipHere = game.ships.find(
-      (s) => s.alive && s.col === cell.col && s.row === cell.row
-    );
-    const view = getBoardView(game);
+    try {
+      if (cell) {
+        const shipHere = game.ships.find(
+          (s) => s.alive && s.col === cell.col && s.row === cell.row
+        );
+        const view = getBoardView(game);
 
-    const ft = view.fireTargets.find((t) => t.col === cell.col && t.row === cell.row);
-    if (ft) {
-      const selected = game.ships.find((s) => s.id === game.selectedId);
-      if (selected) {
-        const weapon =
-          shipDef(selected).weapons.find((w) => w.id === game.activeWeaponId) ||
-          shipDef(selected).weapons[0];
-        fireAt(game, ft.shipId, weapon.id);
-        const actor = currentActor(game);
-        if (actor && actor.faction === game.playerFaction) {
-          selectShip(game, actor.id);
-          game.activeWeaponId = shipDef(actor).weapons[0].id;
-          game.mode = 'move';
+        const ft = view.fireTargets.find((t) => t.col === cell.col && t.row === cell.row);
+        if (ft) {
+          const selected = game.ships.find((s) => s.id === game.selectedId);
+          if (selected) {
+            const weapon =
+              shipDef(selected).weapons.find((w) => w.id === game.activeWeaponId) ||
+              shipDef(selected).weapons[0];
+            fireAt(game, ft.shipId, weapon.id);
+            const actor = currentActor(game);
+            if (actor && actor.faction === game.playerFaction) {
+              selectShip(game, actor.id);
+              game.activeWeaponId = shipDef(actor).weapons[0].id;
+              game.mode = 'move';
+            }
+            onChange();
+            return;
+          }
         }
-        onChange();
-        return;
+
+        if (view.legalMoves.some((m) => m.col === cell.col && m.row === cell.row)) {
+          moveShip(game, cell.col, cell.row);
+          onChange();
+          return;
+        }
+
+        if (shipHere) {
+          selectShip(game, shipHere.id);
+          game.activeWeaponId = shipDef(shipHere).weapons[0].id;
+          onChange();
+          return;
+        }
       }
-    }
-
-    if (view.legalMoves.some((m) => m.col === cell.col && m.row === cell.row)) {
-      moveShip(game, cell.col, cell.row);
-      onChange();
-      return;
-    }
-
-    if (shipHere) {
-      selectShip(game, shipHere.id);
-      game.activeWeaponId = shipDef(shipHere).weapons[0].id;
-      onChange();
+    } finally {
+      // resizeCanvas clears the bitmap — always redraw after any click
+      paint();
     }
   };
 
