@@ -50,53 +50,114 @@ function occupiedSet(ships, exceptId = null) {
   return s;
 }
 
+/**
+ * Place a fleet on one edge of the map with no overlapping hexes.
+ * West = left columns facing east; east = right columns facing west.
+ * Prefers a 1-hex gap between ships, then packs tighter if the fleet is large.
+ */
 function spawnLine(faction, fleetCounts, side, map) {
   const ships = [];
-  // Stagger rows so large mini sprites don't stack on top of each other
-  const baseRow = side === 'west' ? 1 : map.rows - 2;
-  let col = 1;
-  let slot = 0;
-  // Flat-top hex facing: 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE
-  const facing = side === 'west' ? 0 : 3;
+  const facing = side === 'west' ? 0 : 3; // E / W
+  const blocked = new Set((map.blocked || []).map(([c, r]) => key(c, r)));
+  const occupied = new Set();
+
+  const roster = [];
   for (const [typeId, count] of Object.entries(fleetCounts)) {
     const def = SHIP_TYPES[typeId];
-    if (!def || def.faction !== faction) continue;
-    for (let i = 0; i < count; i++) {
-      const row = Math.min(
-        map.rows - 1,
-        Math.max(0, baseRow + (slot % 2 === 0 ? 0 : side === 'west' ? 1 : -1))
-      );
-      while (
-        col < map.cols - 1 &&
-        map.blocked.some(([c, r]) => c === col && r === row)
-      ) {
-        col += 1;
-      }
-      if (col >= map.cols - 1) col = 1;
-      ships.push({
-        id: nextId(),
-        typeId,
-        name: def.name,
-        faction,
-        col,
-        row,
-        facing,
-        hull: def.hull,
-        hullMax: def.hull,
-        shields: def.shields,
-        shieldsMax: def.shields,
-        moveLeft: 0,
-        hexesSinceTurn: 0,
-        fired: false,
-        activated: false,
-        alive: true,
-        overload: false,
-      });
-      // Leave an empty hex between minis so stands don't overlap
-      col += 2;
-      slot += 1;
+    if (!def || def.faction !== faction || !count) continue;
+    for (let i = 0; i < count; i++) roster.push(typeId);
+  }
+  if (!roster.length) return ships;
+
+  const midRow = (map.rows - 1) / 2;
+  // Use up to ~1/3 of the board depth so large fleets still fit
+  const maxDepth = Math.max(2, Math.min(Math.floor(map.cols / 2) - 1, Math.ceil(roster.length / Math.max(1, map.rows - 2)) + 1));
+
+  const candidates = [];
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    const col = side === 'west' ? depth : map.cols - 1 - depth;
+    if (col < 1 || col > map.cols - 2) continue;
+    for (let row = 1; row <= map.rows - 2; row++) {
+      candidates.push({ col, row });
     }
   }
+  // Prefer near the edge, then rows closest to the vertical center
+  candidates.sort((a, b) => {
+    const da = side === 'west' ? a.col : map.cols - 1 - a.col;
+    const db = side === 'west' ? b.col : map.cols - 1 - b.col;
+    if (da !== db) return da - db;
+    return Math.abs(a.row - midRow) - Math.abs(b.row - midRow);
+  });
+
+  const adjacentOccupied = (col, row) => {
+    for (const [dc, dr] of [
+      [1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [1, 1], [-1, -1], [-1, 1],
+    ]) {
+      if (occupied.has(key(col + dc, row + dr))) return true;
+    }
+    return false;
+  };
+
+  const claim = (preferGap) => {
+    for (const cell of candidates) {
+      const k = key(cell.col, cell.row);
+      if (blocked.has(k) || occupied.has(k)) continue;
+      if (preferGap && adjacentOccupied(cell.col, cell.row)) continue;
+      occupied.add(k);
+      return cell;
+    }
+    return null;
+  };
+
+  // Last-resort scan of the whole half-board (still unique hexes)
+  const claimAnywhere = () => {
+    const cols =
+      side === 'west'
+        ? [...Array(Math.floor(map.cols / 2)).keys()].map((c) => c + 1)
+        : [...Array(Math.floor(map.cols / 2)).keys()].map((c) => map.cols - 2 - c);
+    const rows = [...Array(map.rows - 2).keys()].map((r) => r + 1);
+    rows.sort((a, b) => Math.abs(a - midRow) - Math.abs(b - midRow));
+    for (const col of cols) {
+      for (const row of rows) {
+        const k = key(col, row);
+        if (blocked.has(k) || occupied.has(k)) continue;
+        occupied.add(k);
+        return { col, row };
+      }
+    }
+    return null;
+  };
+
+  let skipped = 0;
+  for (const typeId of roster) {
+    const def = SHIP_TYPES[typeId];
+    const cell = claim(true) || claim(false) || claimAnywhere();
+    if (!cell) {
+      // Board truly full on this side — skip rather than stack
+      skipped += 1;
+      continue;
+    }
+    ships.push({
+      id: nextId(),
+      typeId,
+      name: def.name,
+      faction,
+      col: cell.col,
+      row: cell.row,
+      facing,
+      hull: def.hull,
+      hullMax: def.hull,
+      shields: def.shields,
+      shieldsMax: def.shields,
+      moveLeft: 0,
+      hexesSinceTurn: 0,
+      fired: false,
+      activated: false,
+      alive: true,
+      overload: false,
+    });
+  }
+  ships._skipped = skipped;
   return ships;
 }
 
@@ -122,12 +183,14 @@ export function createGame(settings) {
   const playerSide = playerFaction === 'federation' ? 'west' : 'east';
   const enemySide = playerSide === 'west' ? 'east' : 'west';
 
-  const ships = [
-    ...spawnLine(playerFaction, settings.fleet, playerSide, map),
-    ...spawnLine(enemy.faction, enemy.counts, enemySide, map),
-  ];
+  const playerShips = spawnLine(playerFaction, settings.fleet, playerSide, map);
+  const enemyShips = spawnLine(enemy.faction, enemy.counts, enemySide, map);
+  const skipped = (playerShips._skipped || 0) + (enemyShips._skipped || 0);
+  delete playerShips._skipped;
+  delete enemyShips._skipped;
+  const ships = [...playerShips, ...enemyShips];
 
-  return {
+  const game = {
     settings,
     map,
     cols: map.cols,
@@ -146,6 +209,14 @@ export function createGame(settings) {
     camera: createCamera(),
     fx: createFx(),
   };
+  if (skipped) {
+    log(
+      game,
+      `Fleet too large for this board — ${skipped} ship(s) could not be placed.`,
+      'alert'
+    );
+  }
+  return game;
 }
 
 export function shipDef(ship) {
